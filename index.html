@@ -95,6 +95,91 @@
         font-size: 12px;
         opacity: 0.85;
       }
+
+      /* ── Touch controls ─────────────────────────────────────────────────── */
+
+      #touch-controls {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 160px;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        padding: 0 20px 20px;
+        pointer-events: none;     /* container transparent; buttons capture */
+        user-select: none;
+        z-index: 10;
+      }
+
+      /* Hide on devices that have a fine pointer (mouse) */
+      @media (hover: hover) and (pointer: fine) {
+        #touch-controls { display: none; }
+      }
+
+      /* On touch devices move the HUD to the top so controls own the bottom */
+      @media (hover: none) and (pointer: coarse) {
+        #hud {
+          bottom: auto;
+          top: 16px;
+        }
+        #hud-help { display: none; }  /* keyboard hint not relevant on touch */
+      }
+
+      .touch-zone {
+        display: flex;
+        gap: 10px;
+        align-items: flex-end;
+        pointer-events: none;
+      }
+
+      .touch-btn {
+        pointer-events: all;
+        touch-action: none;
+        width: 72px;
+        height: 72px;
+        border-radius: 50%;
+        border: 2px solid rgba(255, 255, 255, 0.35);
+        background: rgba(0, 0, 0, 0.42);
+        color: rgba(255, 255, 255, 0.85);
+        font-size: 26px;
+        line-height: 1;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-tap-highlight-color: transparent;
+        transition: background 0.08s, transform 0.08s;
+      }
+
+      .touch-btn:active,
+      .touch-btn.pressed {
+        background: rgba(255, 255, 255, 0.22);
+        transform: scale(0.93);
+      }
+
+      .gas-btn {
+        width: 86px;
+        height: 86px;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        border-color: rgba(80, 255, 100, 0.55);
+        color: rgba(160, 255, 170, 0.90);
+      }
+
+      .brake-btn {
+        width: 62px;
+        height: 62px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        border-color: rgba(255, 100, 80, 0.50);
+        color: rgba(255, 160, 150, 0.90);
+        align-self: flex-end;
+        margin-bottom: 6px;
+      }
     </style>
   </head>
   <body>
@@ -109,6 +194,20 @@
       </div>
       <div id="hud-help">WASD / arrows — yellow hood is the front</div>
     </div>
+    <!-- Touch controls – hidden automatically on mouse devices via CSS -->
+    <div id="touch-controls">
+      <!-- Left zone: steering -->
+      <div class="touch-zone">
+        <button class="touch-btn" type="button" data-action="left">&#9664;</button>
+        <button class="touch-btn" type="button" data-action="right">&#9654;</button>
+      </div>
+      <!-- Right zone: gas (large) + brake (smaller, above) -->
+      <div class="touch-zone" style="flex-direction:column-reverse; gap:10px;">
+        <button class="touch-btn gas-btn"   type="button" data-action="forward">GAS</button>
+        <button class="touch-btn brake-btn" type="button" data-action="backward">BRAKE</button>
+      </div>
+    </div>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
