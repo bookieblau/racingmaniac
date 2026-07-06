@@ -1,0 +1,10 @@
+{
+  "name": "Racing Maniac",
+  "short_name": "Racing Maniac",
+  "description": "Offroad desert racing game",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#1a1208",
+  "theme_color": "#c87d3a"
+}
