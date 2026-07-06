@@ -43,14 +43,57 @@
         position: fixed;
         left: 16px;
         bottom: 16px;
-        padding: 10px 14px;
+        padding: 12px 14px;
         border-radius: 8px;
-        background: rgba(20, 14, 8, 0.72);
+        background: rgba(20, 14, 8, 0.78);
         color: #f4e6c8;
         font-size: 14px;
-        line-height: 1.5;
+        line-height: 1.45;
         pointer-events: none;
         user-select: none;
+        min-width: 180px;
+      }
+
+      #hud-title {
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+
+      #hud-stats {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        margin-bottom: 6px;
+      }
+
+      #hud-speed {
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1;
+      }
+
+      #hud-speed-label {
+        font-size: 12px;
+        opacity: 0.8;
+      }
+
+      #hud-status {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.12);
+      }
+
+      #hud-status.is-air {
+        background: rgba(255, 196, 64, 0.35);
+        color: #ffe7a8;
+      }
+
+      #hud-help {
+        font-size: 12px;
+        opacity: 0.85;
       }
     </style>
   </head>
@@ -58,8 +101,13 @@
     <canvas id="renderCanvas"></canvas>
     <div id="error"></div>
     <div id="hud">
-      <strong>Racing Maniac</strong><br />
-      Drive: WASD or arrow keys
+      <div id="hud-title">Racing Maniac</div>
+      <div id="hud-stats">
+        <span id="hud-speed">0</span>
+        <span id="hud-speed-label">speed</span>
+        <span id="hud-status">GND</span>
+      </div>
+      <div id="hud-help">WASD / arrows — yellow hood is the front</div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
