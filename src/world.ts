@@ -20,13 +20,13 @@ function makeRng(seed: number) {
 // ── Materials ─────────────────────────────────────────────────────────────────
 
 function lightRockColor(rng: () => number): Color3 {
-  const v = 0.52 + rng() * 0.22;
-  return new Color3(v, v, v * 0.98);
+  const v = 0.32 + rng() * 0.14;   // 0.32–0.46: stays gray even under full sun
+  return new Color3(v, v, v);
 }
 
 function darkRockColor(rng: () => number): Color3 {
-  const v = 0.28 + rng() * 0.14;
-  return new Color3(v, v, v * 1.02);
+  const v = 0.16 + rng() * 0.12;   // 0.16–0.28: dark charcoal gray
+  return new Color3(v, v, v);
 }
 
 function makeMat(scene: Scene, name: string, color: Color3, specular = 0.06): StandardMaterial {
@@ -97,6 +97,7 @@ export function placeRocks(scene: Scene): void {
       scene,
       `rockMat_${i}`,
       i % 3 === 0 ? darkRockColor(rng) : lightRockColor(rng),
+      0.0,   // matte — no specular highlight
     );
     rock.material = mat;
   }
