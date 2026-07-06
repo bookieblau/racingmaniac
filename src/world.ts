@@ -20,13 +20,13 @@ function makeRng(seed: number) {
 // ── Materials ─────────────────────────────────────────────────────────────────
 
 function lightRockColor(rng: () => number): Color3 {
-  const v = 0.32 + rng() * 0.14;   // 0.32–0.46: stays gray even under full sun
-  return new Color3(v, v, v);
+  const v = 0.26 + rng() * 0.10;   // 0.26–0.36: dark gray with warm brown tint
+  return new Color3(v * 1.08, v, v * 0.88);
 }
 
 function darkRockColor(rng: () => number): Color3 {
-  const v = 0.16 + rng() * 0.12;   // 0.16–0.28: dark charcoal gray
-  return new Color3(v, v, v);
+  const v = 0.13 + rng() * 0.09;   // 0.13–0.22: very dark brownish gray
+  return new Color3(v * 1.10, v, v * 0.85);
 }
 
 function makeMat(scene: Scene, name: string, color: Color3, specular = 0.06): StandardMaterial {
