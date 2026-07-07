@@ -7,9 +7,30 @@ import { Vector3 } from "@babylonjs/core";
  */
 export const DESERT_FLOOR = -32;
 
+// ── Challenge Hill ────────────────────────────────────────────────────────────
+// A steep hand-placed cone.  Only the Rock Crawler has enough grip to reach
+// the summit; all other vehicles stall partway up.
+export const CHALLENGE_HILL_X      = 110;
+export const CHALLENGE_HILL_Z      = 70;
+export const CHALLENGE_HILL_RADIUS = 34;   // metres to the base edge
+export const CHALLENGE_HILL_HEIGHT = 40;   // extra height added at the peak
+
+/** Returns the extra height contributed by the challenge cone at (x, z). */
+export function challengeHillHeight(x: number, z: number): number {
+  const dx = x - CHALLENGE_HILL_X;
+  const dz = z - CHALLENGE_HILL_Z;
+  const dist = Math.sqrt(dx * dx + dz * dz);
+  if (dist >= CHALLENGE_HILL_RADIUS) return 0;
+  // t² profile: 0-slope at the base, steepening toward the summit.
+  // Mid-hill slope ≈ 49°; near-summit slope ≈ 67°.
+  const t = 1.0 - dist / CHALLENGE_HILL_RADIUS;
+  return t * t * CHALLENGE_HILL_HEIGHT;
+}
+
 /**
  * Procedural desert height at world (x, z).
- * Layered noise: tall slow dunes, medium rolls, small ripples.
+ * Layered noise: tall slow dunes, medium rolls, small ripples,
+ * plus the challenge hill cone.
  * No floor clamp — full natural relief retained.
  */
 export function terrainHeight(x: number, z: number): number {
@@ -19,7 +40,7 @@ export function terrainHeight(x: number, z: number): number {
   const ripples =
     Math.sin(x * 0.16 + z * 0.13) * 1.1 + Math.sin(x * 0.24 - z * 0.19) * 0.55;
 
-  return largeDunes + mediumDunes + ridge + ripples;
+  return largeDunes + mediumDunes + ridge + ripples + challengeHillHeight(x, z);
 }
 
 const NORMAL_SAMPLE = 1.1;

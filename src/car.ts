@@ -98,6 +98,23 @@ export class Car {
       this.heading += steerDir * steerSpeed * speedFactor * deltaSeconds;
     }
 
+    // ── Slope grip ───────────────────────────────────────────────────────────
+    // On steep uphill grades the car's top speed is capped based on its
+    // slopeDragMult.  The challenge hill (≈49–67° slope) stops all cars except
+    // the Rock Crawler (slopeDragMult 0.55) which just barely crests the summit.
+    // Normal dunes (≤35°) stay below the activation threshold so ordinary
+    // driving isn't affected.
+    const fwdSlopeSin = this.forwardSlopeSin();
+    if (fwdSlopeSin > 0.60) {
+      const uphillCap = Math.max(
+        0,
+        maxSpeed * (1.0 - fwdSlopeSin * this.cfg.slopeDragMult),
+      );
+      if (this.speed > uphillCap) {
+        this.speed = Math.max(uphillCap, this.speed - 60 * deltaSeconds);
+      }
+    }
+
     // ── Move ────────────────────────────────────────────────────────────────
     this.position.x += Math.sin(this.heading) * this.speed * deltaSeconds;
     this.position.z += Math.cos(this.heading) * this.speed * deltaSeconds;
@@ -194,6 +211,20 @@ export class Car {
         pz - lx * sinH + lz * cosH,
       ),
     );
+  }
+
+  // ── Slope measurement ─────────────────────────────────────────────────────
+
+  /** Sine of the terrain slope in the car's forward direction (+ve = uphill). */
+  private forwardSlopeSin(): number {
+    const SAMPLE = 1.8;
+    const sx = Math.sin(this.heading);
+    const sz = Math.cos(this.heading);
+    const hA = terrainHeight(this.position.x + sx * SAMPLE, this.position.z + sz * SAMPLE);
+    const hB = terrainHeight(this.position.x - sx * SAMPLE, this.position.z - sz * SAMPLE);
+    const rise = hA - hB;
+    const run  = SAMPLE * 2;
+    return rise / Math.sqrt(rise * rise + run * run);
   }
 
   // ── Ground sampling ───────────────────────────────────────────────────────

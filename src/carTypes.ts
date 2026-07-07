@@ -18,6 +18,9 @@ export interface CarConfig {
   rearAxleZ: number;   // −Z = behind
   axleX: number;       // half-track width
   carBottomOffset: number;
+  // ── Slope grip ────────────────────────────────────────────────────────────
+  // Lower = better hill-climbing.  The challenge hill requires ≤ 0.6 to summit.
+  slopeDragMult: number;
   // ── HUD stat bars (0–100) ─────────────────────────────────────────────────
   statSpeed: number;
   statHandling: number;
@@ -34,6 +37,7 @@ export const CAR_CONFIGS: Record<CarTypeId, CarConfig> = {
     wheelRadius: 0.52, wheelThickness: 0.30,
     axleY: 0.52, frontAxleZ: 1.32, rearAxleZ: -1.28, axleX: 1.12,
     carBottomOffset: 0.04,
+    slopeDragMult: 2.2,
     statSpeed: 75, statHandling: 80, statPower: 70,
   },
 
@@ -46,6 +50,7 @@ export const CAR_CONFIGS: Record<CarTypeId, CarConfig> = {
     wheelRadius: 0.78, wheelThickness: 0.44,
     axleY: 0.78, frontAxleZ: 1.55, rearAxleZ: -1.50, axleX: 1.42,
     carBottomOffset: 0.06,
+    slopeDragMult: 2.0,
     statSpeed: 50, statHandling: 45, statPower: 95,
   },
 
@@ -58,6 +63,7 @@ export const CAR_CONFIGS: Record<CarTypeId, CarConfig> = {
     wheelRadius: 0.42, wheelThickness: 0.24,
     axleY: 0.42, frontAxleZ: 1.65, rearAxleZ: -1.58, axleX: 1.08,
     carBottomOffset: 0.03,
+    slopeDragMult: 2.7,
     statSpeed: 100, statHandling: 65, statPower: 85,
   },
 
@@ -70,6 +76,7 @@ export const CAR_CONFIGS: Record<CarTypeId, CarConfig> = {
     wheelRadius: 0.62, wheelThickness: 0.38,
     axleY: 0.62, frontAxleZ: 1.22, rearAxleZ: -1.20, axleX: 1.28,
     carBottomOffset: 0.05,
+    slopeDragMult: 0.55,   // ← only vehicle that can summit the challenge hill
     statSpeed: 40, statHandling: 95, statPower: 80,
   },
 };

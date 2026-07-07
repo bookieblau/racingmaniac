@@ -5,7 +5,14 @@ import {
   Scene,
   StandardMaterial,
 } from "@babylonjs/core";
-import { DESERT_FLOOR, TERRAIN_SIZE, terrainHeight } from "./terrain";
+import {
+  CHALLENGE_HILL_X,
+  CHALLENGE_HILL_Z,
+  CHALLENGE_HILL_RADIUS,
+  DESERT_FLOOR,
+  TERRAIN_SIZE,
+  terrainHeight,
+} from "./terrain";
 
 // ── Seeded pseudo-random (same world every load) ─────────────────────────────
 
@@ -323,10 +330,73 @@ export function placeMesas(scene: Scene): void {
   }
 }
 
+// ── Challenge Hill markers ─────────────────────────────────────────────────────
+// A flag pole + banner at the summit, and eight yellow warning posts around the
+// base perimeter so the hill is unmistakeable from a distance.
+
+export function placeHillMarkers(scene: Scene): void {
+  const summitY = terrainHeight(CHALLENGE_HILL_X, CHALLENGE_HILL_Z);
+
+  // ── Flag pole ────────────────────────────────────────────────────────────
+  const poleMat = makeMat(scene, "hillPole", new Color3(0.80, 0.80, 0.82), 0.5);
+  const pole = MeshBuilder.CreateCylinder("hillPole",
+    { diameter: 0.36, height: 11, tessellation: 8 }, scene);
+  pole.position.set(CHALLENGE_HILL_X, summitY + 5.5, CHALLENGE_HILL_Z);
+  pole.isPickable = false;
+  pole.material = poleMat;
+
+  // ── Banner ───────────────────────────────────────────────────────────────
+  // Alternating green / white stripes to match the crawler's olive colour.
+  for (let s = 0; s < 2; s++) {
+    const stripeMat = makeMat(
+      scene,
+      `hillStripe${s}`,
+      s === 0 ? new Color3(0.08, 0.60, 0.18) : new Color3(0.95, 0.95, 0.95),
+      0.1,
+    );
+    const stripe = MeshBuilder.CreateBox(`hillStripe${s}`,
+      { width: 2.80, height: 0.65, depth: 0.07 }, scene);
+    stripe.position.set(
+      CHALLENGE_HILL_X + 1.40,
+      summitY + 10.5 - s * 0.65,
+      CHALLENGE_HILL_Z,
+    );
+    stripe.isPickable = false;
+    stripe.material = stripeMat;
+  }
+
+  // ── Base warning posts ────────────────────────────────────────────────────
+  // 8 posts evenly spaced around the hill circumference, in green/yellow.
+  const postMat = makeMat(scene, "hillPost", new Color3(0.95, 0.82, 0.08), 0.3);
+  const capMat  = makeMat(scene, "hillCap",  new Color3(0.10, 0.62, 0.20), 0.1);
+  const POST_COUNT = 8;
+  for (let i = 0; i < POST_COUNT; i++) {
+    const angle = (i / POST_COUNT) * Math.PI * 2;
+    const px = CHALLENGE_HILL_X + Math.sin(angle) * (CHALLENGE_HILL_RADIUS + 2);
+    const pz = CHALLENGE_HILL_Z + Math.cos(angle) * (CHALLENGE_HILL_RADIUS + 2);
+    const py = terrainHeight(px, pz);
+
+    const postH = 2.6;
+    const post = MeshBuilder.CreateCylinder(`hillPost${i}`,
+      { diameter: 0.28, height: postH, tessellation: 6 }, scene);
+    post.position.set(px, py + postH / 2, pz);
+    post.isPickable = false;
+    post.material = postMat;
+
+    // Small green cap on top
+    const cap = MeshBuilder.CreateCylinder(`hillCap${i}`,
+      { diameter: 0.44, height: 0.30, tessellation: 6 }, scene);
+    cap.position.set(px, py + postH + 0.15, pz);
+    cap.isPickable = false;
+    cap.material = capMat;
+  }
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 export function populateWorld(scene: Scene): void {
   createFarGround(scene);
   placeMesas(scene);
   placeCacti(scene);
+  placeHillMarkers(scene);
 }
