@@ -6,6 +6,7 @@ const SPEED_DISPLAY_SCALE = 2.2;
 export class Hud {
   private readonly speedElement: HTMLElement;
   private readonly statusElement: HTMLElement;
+  private readonly titleElement: HTMLElement | null;
 
   constructor() {
     const speedElement = document.getElementById("hud-speed");
@@ -15,6 +16,11 @@ export class Hud {
     }
     this.speedElement = speedElement;
     this.statusElement = statusElement;
+    this.titleElement = document.getElementById("hud-title");
+  }
+
+  setCarName(name: string): void {
+    if (this.titleElement) this.titleElement.textContent = name;
   }
 
   update(car: Car): void {

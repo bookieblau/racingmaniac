@@ -211,6 +211,152 @@
         align-self: flex-end;
         margin-bottom: 6px;
       }
+
+      /* ── Garage / car-select overlay ───────────────────────────────────── */
+
+      #garage {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(ellipse at 50% 30%, #1c0f2e 0%, #0d0608 60%, #1a0c04 100%);
+        overflow-y: auto;
+        transition: opacity 0.35s ease;
+      }
+
+      #garage.g-fade-out {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .g-inner {
+        text-align: center;
+        padding: 28px 16px 32px;
+        width: 100%;
+        max-width: 900px;
+      }
+
+      .g-title {
+        margin: 0 0 6px;
+        font-size: clamp(2rem, 7vw, 3.4rem);
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        color: #f0c020;
+        text-shadow: 0 0 28px rgba(240, 192, 32, 0.55);
+      }
+
+      .g-subtitle {
+        margin: 0 0 28px;
+        font-size: clamp(0.85rem, 2.5vw, 1.1rem);
+        color: #c8a060;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+      }
+
+      .g-cards {
+        display: flex;
+        gap: 14px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+
+      .g-card {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.13);
+        border-radius: 14px;
+        overflow: hidden;
+        width: 190px;
+        cursor: pointer;
+        transition: transform 0.18s, box-shadow 0.18s;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      .g-card:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65);
+      }
+
+      .g-card-header {
+        padding: 18px 12px 14px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 7px;
+      }
+
+      .g-icon {
+        font-size: 2.4rem;
+        line-height: 1;
+      }
+
+      .g-car-name {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #fff;
+        text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
+      }
+
+      .g-card-body {
+        padding: 10px 14px 14px;
+      }
+
+      .g-desc {
+        margin: 0 0 12px;
+        font-size: 0.74rem;
+        color: #b09878;
+        line-height: 1.45;
+        min-height: 36px;
+      }
+
+      .g-stat {
+        margin-bottom: 7px;
+      }
+
+      .g-stat-label {
+        display: block;
+        font-size: 0.60rem;
+        color: #7878a0;
+        letter-spacing: 0.12em;
+        margin-bottom: 3px;
+      }
+
+      .g-stat-track {
+        background: rgba(255, 255, 255, 0.10);
+        border-radius: 4px;
+        height: 7px;
+        overflow: hidden;
+      }
+
+      .g-stat-fill {
+        height: 100%;
+        border-radius: 4px;
+      }
+
+      .g-drive-btn {
+        display: block;
+        width: 100%;
+        margin-top: 14px;
+        padding: 10px 0;
+        background: linear-gradient(135deg, #e85020 0%, #c02808 100%);
+        color: #fff;
+        font-weight: 700;
+        font-size: 0.92rem;
+        letter-spacing: 0.12em;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: filter 0.12s, transform 0.08s;
+      }
+
+      .g-drive-btn:hover {
+        filter: brightness(1.18);
+      }
+
+      .g-drive-btn:active {
+        transform: scale(0.96);
+      }
     </style>
   </head>
   <body>

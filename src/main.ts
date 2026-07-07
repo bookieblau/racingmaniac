@@ -9,6 +9,7 @@ import {
 } from "@babylonjs/core";
 import { ChaseCamera } from "./camera";
 import { Car } from "./car";
+import { CarConfig } from "./carTypes";
 import { Hud } from "./hud";
 import { InputManager } from "./input";
 import {
@@ -21,6 +22,8 @@ import { createDesertSky } from "./sky";
 import { createDesertTerrain } from "./terrainMesh";
 import { populateWorld } from "./world";
 import { DustSystem } from "./dust";
+import { showGarage } from "./garage";
+import { CAR_CONFIGS } from "./carTypes";
 
 function showError(message: string): void {
   const element = document.getElementById("error");
@@ -30,11 +33,9 @@ function showError(message: string): void {
   }
 }
 
-function startGame(): void {
+function startGame(carConfig: CarConfig): void {
   const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement | null;
-  if (!canvas) {
-    throw new Error("Missing #renderCanvas");
-  }
+  if (!canvas) throw new Error("Missing #renderCanvas");
 
   const engine = new Engine(canvas, true, {
     preserveDrawingBuffer: true,
@@ -42,13 +43,10 @@ function startGame(): void {
     adaptToDeviceRatio: true,
   });
 
-  if (!engine.webGLVersion) {
-    throw new Error("WebGL is not available in this browser.");
-  }
+  if (!engine.webGLVersion) throw new Error("WebGL is not available in this browser.");
 
   const scene = new Scene(engine);
   configureSceneAtmosphere(scene);
-
   createDesertSky(scene);
 
   const hemi = new HemisphericLight("hemi", new Vector3(0, 1, 0), scene);
@@ -64,7 +62,7 @@ function startGame(): void {
   createDesertTerrain(scene);
   populateWorld(scene);
 
-  const car = new Car(scene);
+  const car = new Car(scene, carConfig);
 
   const camera = new FreeCamera("followCam", new Vector3(0, 6, -13), scene);
   camera.minZ = 0.1;
@@ -75,6 +73,8 @@ function startGame(): void {
   const hud   = new Hud();
   const dust  = new DustSystem(scene);
 
+  hud.setCarName(carConfig.name);
+
   engine.runRenderLoop(() => {
     const deltaSeconds = engine.getDeltaTime() / 1000;
     car.update(deltaSeconds, input);
@@ -84,30 +84,23 @@ function startGame(): void {
     scene.render();
   });
 
-  const resize = (): void => {
-    engine.resize();
-  };
-
-  window.addEventListener("resize", resize);
-  resize();
+  window.addEventListener("resize", () => engine.resize());
+  engine.resize();
 }
 
-try {
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => {
-      try {
-        startGame();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        showError(message);
-        console.error(error);
-      }
-    });
-  } else {
-    startGame();
+async function runApp(): Promise<void> {
+  try {
+    const carTypeId = await showGarage();
+    startGame(CAR_CONFIGS[carTypeId]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    showError(message);
+    console.error(error);
   }
-} catch (error) {
-  const message = error instanceof Error ? error.message : String(error);
-  showError(message);
-  console.error(error);
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => void runApp());
+} else {
+  void runApp();
 }

@@ -10,53 +10,28 @@ import {
 } from "@babylonjs/core";
 
 import { InputManager } from "./input";
+import { CarConfig } from "./carTypes";
 import { TERRAIN_SIZE, terrainHeight, terrainNormal } from "./terrain";
 
 const HALF_EXTENT = TERRAIN_SIZE / 2 - 4;
 
-export const MAX_SPEED = 34;
-
-const GRAVITY = 22;
-const ACCELERATION = 28;
-const BRAKE = 40;
-const STEER_SPEED = 2.8;
-const MIN_STEER_FACTOR = 0.45;
-const GROUND_EPSILON = 0.05;
+// ── Shared physics constants (not configurable per car) ───────────────────────
+const GRAVITY              = 22;
+const MIN_STEER_FACTOR     = 0.45;
+const GROUND_EPSILON       = 0.05;
 const MAX_VERTICAL_VELOCITY = 14;
-
-// Liftoff: terrain must drop at this rate (m/s) AND car speed must exceed minimum
-const LIFTOFF_THRESHOLD  = 15;  // m/s of ground-fall rate
-const LIFTOFF_MIN_SPEED  = 7;   // m/s car speed required for liftoff
-
-const TILT_BLEND = 8;
-const AIR_TILT_DECAY = 6;
-const MAX_PITCH = 0.28;
-const MAX_ROLL = 0.28;
-
-// Car geometry constants (root Y = wheel bottom contact point)
-const WHEEL_RADIUS = 0.52;
-const WHEEL_THICKNESS = 0.30;
-const AXLE_Y = WHEEL_RADIUS;           // local: axle centre above root
-const FRONT_AXLE_Z = 1.32;
-const REAR_AXLE_Z = -1.28;
-const AXLE_X = 1.12;                   // half-width to axle centre
-
-// Root sits at wheel-bottom height (near ground)
-const CAR_BOTTOM_OFFSET = 0.04;
-
-// Ground sampling uses wheel corner positions in forward/right space
-const WHEEL_SAMPLE_OFFSETS: ReadonlyArray<readonly [number, number]> = [
-  [0, 0],
-  [FRONT_AXLE_Z, 0],
-  [REAR_AXLE_Z, 0],
-  [FRONT_AXLE_Z,  AXLE_X],
-  [FRONT_AXLE_Z, -AXLE_X],
-  [REAR_AXLE_Z,   AXLE_X],
-  [REAR_AXLE_Z,  -AXLE_X],
-];
+const LIFTOFF_THRESHOLD    = 15;   // m/s ground-fall rate to trigger liftoff
+const LIFTOFF_MIN_SPEED    = 7;    // m/s car speed required for liftoff
+const TILT_BLEND           = 8;
+const AIR_TILT_DECAY       = 6;
+const MAX_PITCH            = 0.28;
+const MAX_ROLL             = 0.28;
 
 export class Car {
   readonly root: TransformNode;
+
+  private readonly cfg: CarConfig;
+  private readonly wheelSampleOffsets: ReadonlyArray<readonly [number, number]>;
 
   private speed = 0;
   private heading = 0;
@@ -71,21 +46,34 @@ export class Car {
   private readonly position = new Vector3(0, 0, 0);
   private readonly scratchNormal = new Vector3();
 
-  constructor(scene: Scene) {
+  constructor(scene: Scene, cfg: CarConfig) {
+    this.cfg = cfg;
+    this.wheelSampleOffsets = [
+      [0, 0],
+      [cfg.frontAxleZ,  0],
+      [cfg.rearAxleZ,   0],
+      [cfg.frontAxleZ,  cfg.axleX],
+      [cfg.frontAxleZ, -cfg.axleX],
+      [cfg.rearAxleZ,   cfg.axleX],
+      [cfg.rearAxleZ,  -cfg.axleX],
+    ];
+
     this.root = new TransformNode("carRoot", scene);
     this.buildVisuals(scene);
 
-    this.previousGroundY = sampleGroundUnderCar(0, 0, this.heading);
-    this.altitude = this.previousGroundY + CAR_BOTTOM_OFFSET;
+    this.previousGroundY = this.sampleGround(0, 0, this.heading);
+    this.altitude = this.previousGroundY + cfg.carBottomOffset;
     this.syncTransform();
   }
 
   update(deltaSeconds: number, input: InputManager): void {
+    const { maxSpeed, acceleration, brake, steerSpeed } = this.cfg;
+
     // ── Throttle / brake ────────────────────────────────────────────────────
     if (input.isActive("forward")) {
-      this.speed = Math.min(this.speed + ACCELERATION * deltaSeconds, MAX_SPEED);
+      this.speed = Math.min(this.speed + acceleration * deltaSeconds, maxSpeed);
     } else if (input.isActive("backward")) {
-      this.speed = Math.max(this.speed - BRAKE * deltaSeconds, -MAX_SPEED * 0.45);
+      this.speed = Math.max(this.speed - brake * deltaSeconds, -maxSpeed * 0.45);
     } else {
       const drag = this.speed > 0 ? -14 : 14;
       const next = this.speed + drag * deltaSeconds;
@@ -96,8 +84,8 @@ export class Car {
     // ── Steering ────────────────────────────────────────────────────────────
     const steerDir = input.isActive("left") ? -1 : input.isActive("right") ? 1 : 0;
     if (steerDir !== 0) {
-      const speedFactor = Math.max(MIN_STEER_FACTOR, Math.abs(this.speed) / MAX_SPEED);
-      this.heading += steerDir * STEER_SPEED * speedFactor * deltaSeconds;
+      const speedFactor = Math.max(MIN_STEER_FACTOR, Math.abs(this.speed) / maxSpeed);
+      this.heading += steerDir * steerSpeed * speedFactor * deltaSeconds;
     }
 
     // ── Move ────────────────────────────────────────────────────────────────
@@ -107,21 +95,19 @@ export class Car {
     this.position.z = clamp(this.position.z, -HALF_EXTENT, HALF_EXTENT);
 
     // ── Vertical (jump / gravity) ────────────────────────────────────────────
-    const groundY = sampleGroundUnderCar(this.position.x, this.position.z, this.heading);
+    const groundY = this.sampleGround(this.position.x, this.position.z, this.heading);
     const tiltLift =
       Math.abs(Math.sin(this.pitch)) * 1.1 + Math.abs(Math.sin(this.roll)) * 0.75;
-    const groundContact = groundY + CAR_BOTTOM_OFFSET + tiltLift;
+    const groundContact = groundY + this.cfg.carBottomOffset + tiltLift;
 
     // Rate at which the terrain is dropping under the car (m/s, negative = falling away)
     const groundFallRate = (groundY - this.previousGroundY) / deltaSeconds;
 
     if (!this.airborne) {
-      // Liftoff: terrain falls away faster than the car can naturally follow at crests.
       if (this.speed >= LIFTOFF_MIN_SPEED && groundFallRate < -LIFTOFF_THRESHOLD) {
         this.airborne = true;
         this.verticalVelocity = 0;
       } else {
-        // Stay firmly on ground — snap altitude to terrain contact point.
         this.altitude = groundContact;
         this.verticalVelocity = 0;
         this.airborne = false;
@@ -143,7 +129,7 @@ export class Car {
     }
 
     // ── Wheel spin ──────────────────────────────────────────────────────────
-    this.wheelRotation += (this.speed / WHEEL_RADIUS) * deltaSeconds;
+    this.wheelRotation += (this.speed / this.cfg.wheelRadius) * deltaSeconds;
     const spinQ = Quaternion.FromEulerAngles(this.wheelRotation, 0, 0);
     for (const hub of this.wheels) {
       hub.rotationQuaternion = spinQ;
@@ -154,44 +140,26 @@ export class Car {
     this.syncTransform();
   }
 
-  getWorldPosition(): Vector3 {
-    return this.root.position.clone();
-  }
+  getWorldPosition(): Vector3 { return this.root.position.clone(); }
+  getHeading(): number        { return this.heading; }
+  getSpeed(): number          { return this.speed; }
+  getMaxSpeed(): number       { return this.cfg.maxSpeed; }
+  isAirborne(): boolean       { return this.airborne; }
+  getCarName(): string        { return this.cfg.name; }
 
-  getHeading(): number {
-    return this.heading;
-  }
-
-  getSpeed(): number {
-    return this.speed;
-  }
-
-  getMaxSpeed(): number {
-    return MAX_SPEED;
-  }
-
-  isAirborne(): boolean {
-    return this.airborne;
-  }
-
-  /**
-   * World-space positions of all four wheel hubs in order:
-   * [0] right-front, [1] left-front, [2] right-rear, [3] left-rear.
-   * Y is approximate (altitude + axle height) — good enough for dust/tracks.
-   */
   getWheelWorldPositions(): Vector3[] {
+    const { axleX, axleY, frontAxleZ, rearAxleZ } = this.cfg;
     const px = this.root.position.x;
     const py = this.root.position.y;
     const pz = this.root.position.z;
     const sinH = Math.sin(this.heading);
     const cosH = Math.cos(this.heading);
 
-    // local axle offsets: [right(+X), up(+Y), forward(+Z)]
     const axles: [number, number, number][] = [
-      [ AXLE_X,  AXLE_Y, FRONT_AXLE_Z],
-      [-AXLE_X,  AXLE_Y, FRONT_AXLE_Z],
-      [ AXLE_X,  AXLE_Y, REAR_AXLE_Z],
-      [-AXLE_X,  AXLE_Y, REAR_AXLE_Z],
+      [ axleX,  axleY, frontAxleZ],
+      [-axleX,  axleY, frontAxleZ],
+      [ axleX,  axleY, rearAxleZ],
+      [-axleX,  axleY, rearAxleZ],
     ];
 
     return axles.map(([lx, ly, lz]) =>
@@ -203,151 +171,18 @@ export class Car {
     );
   }
 
-  // ── Build visuals ──────────────────────────────────────────────────────────
+  // ── Ground sampling ───────────────────────────────────────────────────────
 
-  private buildVisuals(scene: Scene): void {
-    const bodyMat  = mat(scene, "body",  new Color3(0.78, 0.16, 0.12));
-    const hoodMat  = mat(scene, "hood",  new Color3(0.60, 0.12, 0.09));
-    const glassMat = mat(scene, "glass", new Color3(0.35, 0.60, 0.88), 0.05);
-    const tireMat  = mat(scene, "tire",  new Color3(0.15, 0.14, 0.13));
-    const rimMat   = mat(scene, "rim",   new Color3(0.78, 0.78, 0.78), 0.55);
-    const lightMat = mat(scene, "light", new Color3(1.0,  0.96, 0.82), 0.0, new Color3(0.9, 0.85, 0.6));
-    const brakeMat = mat(scene, "brake", new Color3(0.85, 0.18, 0.12), 0.0, new Color3(0.6, 0.05, 0.05));
-    const bumperMat= mat(scene, "bumper",new Color3(0.22, 0.22, 0.22), 0.3);
-    const rollMat  = mat(scene, "roll",  new Color3(0.30, 0.30, 0.28), 0.35);
-
-    const BODY_Y   = AXLE_Y + 0.28;   // centre of main body slab
-    const CABIN_Y  = BODY_Y + 0.28 + 0.38;  // centre of cabin
-
-    // ── Chassis / body slab ─────────────────────────────────────────────────
-    const body = box(scene, "body", 2.05, 0.56, 3.22);
-    body.position.set(0, BODY_Y, 0);
-    body.material = bodyMat;
-    body.parent = this.root;
-
-    // ── Hood (raised engine bay cover) ──────────────────────────────────────
-    const hood = box(scene, "hood", 1.72, 0.16, 1.1);
-    hood.position.set(0, BODY_Y + 0.28 + 0.08, 0.88);
-    hood.material = hoodMat;
-    hood.parent = this.root;
-
-    // ── Cabin ───────────────────────────────────────────────────────────────
-    const cabin = box(scene, "cabin", 1.62, 0.76, 1.68);
-    cabin.position.set(0, CABIN_Y, -0.18);
-    cabin.material = bodyMat;
-    cabin.parent = this.root;
-
-    // ── Windshield ───────────────────────────────────────────────────────────
-    const ws = box(scene, "ws", 1.38, 0.58, 0.07);
-    ws.position.set(0, CABIN_Y + 0.02, 0.68);
-    ws.rotation.x = -0.22;
-    ws.material = glassMat;
-    ws.parent = this.root;
-
-    // ── Rear window ─────────────────────────────────────────────────────────
-    const rw = box(scene, "rw", 1.32, 0.50, 0.07);
-    rw.position.set(0, CABIN_Y + 0.02, -1.02);
-    rw.rotation.x = 0.22;
-    rw.material = glassMat;
-    rw.parent = this.root;
-
-    // ── Side windows ────────────────────────────────────────────────────────
-    for (const side of [-1, 1] as const) {
-      const sw = box(scene, `sw${side}`, 0.07, 0.44, 1.2);
-      sw.position.set(side * 0.815, CABIN_Y + 0.05, -0.18);
-      sw.material = glassMat;
-      sw.parent = this.root;
+  private sampleGround(x: number, z: number, heading: number): number {
+    const sin = Math.sin(heading);
+    const cos = Math.cos(heading);
+    let maxGround = -Infinity;
+    for (const [fwd, right] of this.wheelSampleOffsets) {
+      const sx = x + sin * fwd + cos * right;
+      const sz = z + cos * fwd - sin * right;
+      maxGround = Math.max(maxGround, terrainHeight(sx, sz));
     }
-
-    // ── Front bumper ─────────────────────────────────────────────────────────
-    const fbump = box(scene, "fbump", 2.14, 0.30, 0.22);
-    fbump.position.set(0, AXLE_Y + 0.12, FRONT_AXLE_Z + 0.24);
-    fbump.material = bumperMat;
-    fbump.parent = this.root;
-
-    // ── Rear bumper ──────────────────────────────────────────────────────────
-    const rbump = box(scene, "rbump", 2.10, 0.26, 0.20);
-    rbump.position.set(0, AXLE_Y + 0.12, REAR_AXLE_Z - 0.22);
-    rbump.material = bumperMat;
-    rbump.parent = this.root;
-
-    // ── Headlights ───────────────────────────────────────────────────────────
-    for (const side of [-1, 1] as const) {
-      const hl = box(scene, `hl${side}`, 0.26, 0.18, 0.07);
-      hl.position.set(side * 0.72, BODY_Y + 0.10, FRONT_AXLE_Z + 0.14);
-      hl.material = lightMat;
-      hl.parent = this.root;
-    }
-
-    // ── Tail lights ───────────────────────────────────────────────────────────
-    for (const side of [-1, 1] as const) {
-      const tl = box(scene, `tl${side}`, 0.24, 0.16, 0.07);
-      tl.position.set(side * 0.72, BODY_Y + 0.10, REAR_AXLE_Z - 0.12);
-      tl.material = brakeMat;
-      tl.parent = this.root;
-    }
-
-    // ── Roll cage bars ────────────────────────────────────────────────────────
-    // Horizontal bar across top
-    const rbar = box(scene, "rbar", 1.56, 0.09, 0.09);
-    rbar.position.set(0, CABIN_Y + 0.38 + 0.045, -0.18);
-    rbar.material = rollMat;
-    rbar.parent = this.root;
-
-    // ── Wheels (4×) ───────────────────────────────────────────────────────────
-    // Each wheel uses a hub TransformNode at the axle centre.
-    // Children (tyre, rim, valve marker) are parented to the hub so that
-    // spinning the hub around its local X axis (= the car's left-right axle)
-    // produces correct rolling motion.  The asymmetric valve stem makes the
-    // spin direction clearly visible.
-    const axlePositions: Array<[number, number, number]> = [
-      [ AXLE_X,  AXLE_Y, FRONT_AXLE_Z],
-      [-AXLE_X,  AXLE_Y, FRONT_AXLE_Z],
-      [ AXLE_X,  AXLE_Y, REAR_AXLE_Z],
-      [-AXLE_X,  AXLE_Y, REAR_AXLE_Z],
-    ];
-
-    for (const [x, y, z] of axlePositions) {
-      const hub = new TransformNode("wheelHub", scene);
-      hub.parent = this.root;
-      hub.position.set(x, y, z);
-
-      // Tyre — cylinder rotated so its axis runs along hub-local X
-      const tyre = MeshBuilder.CreateCylinder(
-        "tyre",
-        { diameter: WHEEL_RADIUS * 2, height: WHEEL_THICKNESS, tessellation: 20 },
-        scene,
-      );
-      tyre.rotation.z = Math.PI / 2;
-      tyre.parent = hub;
-      tyre.material = tireMat;
-
-      // Rim disc inset toward the car body
-      const inset = x > 0 ? -0.08 : 0.08;
-      const rim = MeshBuilder.CreateCylinder(
-        "rim",
-        { diameter: WHEEL_RADIUS * 1.15, height: 0.06, tessellation: 16 },
-        scene,
-      );
-      rim.rotation.z = Math.PI / 2;
-      rim.position.x = inset;
-      rim.parent = hub;
-      rim.material = rimMat;
-
-      // Valve-stem marker — small dark nub on the outer tyre face.
-      // Orbits the axle as the wheel spins, making rotation clearly visible.
-      const outerFace = x > 0 ? WHEEL_THICKNESS / 2 + 0.01 : -(WHEEL_THICKNESS / 2 + 0.01);
-      const valve = MeshBuilder.CreateBox(
-        "valve",
-        { width: 0.04, height: 0.14, depth: 0.07 },
-        scene,
-      );
-      valve.position.set(outerFace, WHEEL_RADIUS * 0.70, 0);
-      valve.parent = hub;
-      valve.material = rimMat;
-
-      this.wheels.push(hub);
-    }
+    return maxGround;
   }
 
   // ── Tilt ──────────────────────────────────────────────────────────────────
@@ -386,24 +221,296 @@ export class Car {
       this.pitch, this.heading, this.roll,
     );
   }
-}
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+  // ── Build visuals (dispatches to one of four builders) ────────────────────
 
-function sampleGroundUnderCar(x: number, z: number, heading: number): number {
-  const sin = Math.sin(heading);
-  const cos = Math.cos(heading);
-  let maxGround = -Infinity;
-  for (const [fwd, right] of WHEEL_SAMPLE_OFFSETS) {
-    const sx = x + sin * fwd + cos * right;
-    const sz = z + cos * fwd - sin * right;
-    maxGround = Math.max(maxGround, terrainHeight(sx, sz));
+  private buildVisuals(scene: Scene): void {
+    switch (this.cfg.id) {
+      case "buggy":   this.buildBuggy(scene);   break;
+      case "monster": this.buildMonster(scene);  break;
+      case "racer":   this.buildRacer(scene);    break;
+      case "crawler": this.buildCrawler(scene);  break;
+    }
   }
-  return maxGround;
+
+  // ── 1. Dune Buggy ─────────────────────────────────────────────────────────
+
+  private buildBuggy(scene: Scene): void {
+    const { axleY, frontAxleZ, rearAxleZ, axleX } = this.cfg;
+    const bodyC  = hex(this.cfg.bodyColorHex);
+    const darkC  = bodyC.scale(0.75);
+    const BODY_Y  = axleY + 0.28;
+    const CABIN_Y = BODY_Y + 0.28 + 0.38;
+
+    const bodyMat   = mat(scene, "body",   bodyC);
+    const hoodMat   = mat(scene, "hood",   new Color3(0.82, 0.68, 0.08));
+    const glassMat  = mat(scene, "glass",  new Color3(0.35, 0.60, 0.88), 0.05);
+    const bumperMat = mat(scene, "bumper", new Color3(0.22, 0.22, 0.22), 0.3);
+    const rollMat   = mat(scene, "roll",   new Color3(0.30, 0.30, 0.28), 0.35);
+    const lightMat  = mat(scene, "light",  new Color3(1.0, 0.96, 0.82), 0.0, new Color3(0.9, 0.85, 0.6));
+    const brakeMat  = mat(scene, "brake",  new Color3(0.85, 0.18, 0.12), 0.0, new Color3(0.6, 0.05, 0.05));
+
+    attach(scene, this.root, "body",  2.05, 0.56, 3.22, 0, BODY_Y, 0, bodyMat);
+    attach(scene, this.root, "hood",  1.72, 0.16, 1.10, 0, BODY_Y + 0.36, 0.88, hoodMat);
+    attach(scene, this.root, "cabin", 1.62, 0.76, 1.68, 0, CABIN_Y, -0.18, bodyMat);
+    attach(scene, this.root, "ws",    1.38, 0.58, 0.07, 0, CABIN_Y + 0.02, 0.68, glassMat, [-0.22, 0, 0]);
+    attach(scene, this.root, "rw",    1.32, 0.50, 0.07, 0, CABIN_Y + 0.02, -1.02, glassMat, [0.22, 0, 0]);
+    for (const s of [-1, 1] as const) {
+      attach(scene, this.root, `sw${s}`, 0.07, 0.44, 1.20, s * 0.815, CABIN_Y + 0.05, -0.18, glassMat);
+    }
+    attach(scene, this.root, "fbump", 2.14, 0.30, 0.22, 0, axleY + 0.12, frontAxleZ + 0.24, bumperMat);
+    attach(scene, this.root, "rbump", 2.10, 0.26, 0.20, 0, axleY + 0.12, rearAxleZ  - 0.22, bumperMat);
+    attach(scene, this.root, "rbar",  1.56, 0.09, 0.09, 0, CABIN_Y + 0.42, -0.18, rollMat);
+    for (const s of [-1, 1] as const) {
+      attach(scene, this.root, `hl${s}`, 0.26, 0.18, 0.07, s * 0.72, BODY_Y + 0.10, frontAxleZ + 0.14, lightMat);
+      attach(scene, this.root, `tl${s}`, 0.24, 0.16, 0.07, s * 0.72, BODY_Y + 0.10, rearAxleZ  - 0.12, brakeMat);
+    }
+
+    void darkC; // suppress unused-variable lint
+    this.addWheels(scene, axleX, axleY, frontAxleZ, rearAxleZ,
+      new Color3(0.78, 0.78, 0.78), new Color3(0.15, 0.14, 0.13));
+  }
+
+  // ── 2. Monster Truck ──────────────────────────────────────────────────────
+
+  private buildMonster(scene: Scene): void {
+    const { axleY, frontAxleZ, rearAxleZ, axleX } = this.cfg;
+    const bodyC   = hex(this.cfg.bodyColorHex);
+    const BODY_Y  = axleY + 0.32;
+    const CABIN_Y = BODY_Y + 0.60 + 0.48;
+
+    const bodyMat    = mat(scene, "body",    bodyC);
+    const darkMat    = mat(scene, "dark",    bodyC.scale(0.65));
+    const glassMat   = mat(scene, "glass",   new Color3(0.35, 0.60, 0.88), 0.05);
+    const bumperMat  = mat(scene, "bumper",  new Color3(0.18, 0.18, 0.18), 0.3);
+    const rollMat    = mat(scene, "roll",    new Color3(0.28, 0.28, 0.25), 0.35);
+    const flameMat   = mat(scene, "flame",   new Color3(1.0, 0.55, 0.0), 0.0, new Color3(0.5, 0.22, 0.0));
+    const lightMat   = mat(scene, "light",   new Color3(1.0, 0.96, 0.82), 0.0, new Color3(0.9, 0.85, 0.6));
+
+    // Wide boxy body
+    attach(scene, this.root, "body",  2.60, 0.64, 3.20, 0, BODY_Y, 0, bodyMat);
+    // Hood with central scoop
+    attach(scene, this.root, "hood",  2.40, 0.22, 1.30, 0, BODY_Y + 0.42, 0.92, darkMat);
+    attach(scene, this.root, "scoop", 0.60, 0.28, 0.90, 0, BODY_Y + 0.54, 0.76, bodyMat);
+    // Cabin
+    attach(scene, this.root, "cabin", 2.20, 0.82, 1.80, 0, CABIN_Y, -0.16, bodyMat);
+    attach(scene, this.root, "ws",    1.82, 0.60, 0.08, 0, CABIN_Y + 0.04, 0.78, glassMat, [-0.20, 0, 0]);
+    attach(scene, this.root, "rw",    1.74, 0.52, 0.08, 0, CABIN_Y + 0.04, -1.08, glassMat, [0.20, 0, 0]);
+    for (const s of [-1, 1] as const) {
+      attach(scene, this.root, `sw${s}`, 0.08, 0.52, 1.30, s * 1.105, CABIN_Y + 0.06, -0.16, glassMat);
+    }
+    // Heavy bumpers
+    attach(scene, this.root, "fbump", 2.80, 0.46, 0.28, 0, BODY_Y + 0.06, frontAxleZ + 0.30, bumperMat);
+    attach(scene, this.root, "rbump", 2.76, 0.38, 0.24, 0, BODY_Y + 0.06, rearAxleZ  - 0.28, bumperMat);
+    // Fender flares
+    for (const s of [-1, 1] as const) {
+      attach(scene, this.root, `ffF${s}`, 0.26, 0.34, 1.10, s * 1.46, BODY_Y + 0.14, frontAxleZ - 0.06, darkMat);
+      attach(scene, this.root, `ffR${s}`, 0.26, 0.34, 1.10, s * 1.46, BODY_Y + 0.14, rearAxleZ  + 0.06, darkMat);
+    }
+    // Exhaust stacks (vertical cylinders on each side)
+    for (const s of [-1, 1] as const) {
+      const ex = MeshBuilder.CreateCylinder(`ex${s}`, { diameter: 0.14, height: 1.10, tessellation: 8 }, scene);
+      ex.position.set(s * 1.22, BODY_Y + 0.80, rearAxleZ + 0.40);
+      ex.parent = this.root;
+      ex.material = bumperMat;
+    }
+    // Flame decal on sides (emissive orange strip)
+    for (const s of [-1, 1] as const) {
+      attach(scene, this.root, `fl${s}`, 0.06, 0.22, 2.00, s * 1.31, BODY_Y + 0.24, -0.10, flameMat);
+    }
+    // Roll cage top bar
+    attach(scene, this.root, "rbar", 2.14, 0.10, 0.10, 0, CABIN_Y + 0.46, -0.16, rollMat);
+    // Headlights (4 × round)
+    for (const s of [-1, 1] as const) {
+      attach(scene, this.root, `hl${s}`,  0.32, 0.22, 0.08, s * 0.84, BODY_Y + 0.18, frontAxleZ + 0.16, lightMat);
+      attach(scene, this.root, `hl2${s}`, 0.32, 0.22, 0.08, s * 0.32, BODY_Y + 0.18, frontAxleZ + 0.16, lightMat);
+    }
+
+    this.addWheels(scene, axleX, axleY, frontAxleZ, rearAxleZ,
+      new Color3(0.70, 0.72, 0.74), new Color3(0.12, 0.12, 0.12));
+  }
+
+  // ── 3. Desert Racer ───────────────────────────────────────────────────────
+
+  private buildRacer(scene: Scene): void {
+    const { axleY, frontAxleZ, rearAxleZ, axleX } = this.cfg;
+    const bodyC   = hex(this.cfg.bodyColorHex);
+    const BODY_Y  = axleY + 0.20;
+    const CABIN_Y = BODY_Y + 0.36 + 0.28;
+
+    const bodyMat   = mat(scene, "body",   bodyC);
+    const darkMat   = mat(scene, "dark",   bodyC.scale(0.70));
+    const glassMat  = mat(scene, "glass",  new Color3(0.35, 0.60, 0.88), 0.05);
+    const bumperMat = mat(scene, "bumper", new Color3(0.18, 0.18, 0.18), 0.3);
+    const rollMat   = mat(scene, "roll",   new Color3(0.32, 0.32, 0.30), 0.4);
+    const numMat    = mat(scene, "num",    new Color3(0.96, 0.96, 0.96));
+    const lightMat  = mat(scene, "light",  new Color3(1.0, 0.96, 0.82), 0.0, new Color3(0.9, 0.85, 0.6));
+    const brakeMat  = mat(scene, "brake",  new Color3(0.85, 0.18, 0.12), 0.0, new Color3(0.6, 0.05, 0.05));
+
+    // Long low body
+    attach(scene, this.root, "body",    1.88, 0.40, 3.60, 0, BODY_Y, 0, bodyMat);
+    // Front splitter (thin wide strip below nose)
+    attach(scene, this.root, "split",   2.00, 0.06, 0.50, 0, BODY_Y - 0.14, frontAxleZ + 0.34, bumperMat);
+    // Open cockpit (short windscreen + rollbar only)
+    attach(scene, this.root, "cockpit", 1.50, 0.52, 1.40, 0, CABIN_Y, -0.18, darkMat);
+    attach(scene, this.root, "ws",      1.36, 0.46, 0.07, 0, CABIN_Y + 0.02, 0.58, glassMat, [-0.18, 0, 0]);
+    // Roll hoop
+    attach(scene, this.root, "rhoop",   0.10, 0.68, 0.10, -0.60, CABIN_Y + 0.10, -0.72, rollMat);
+    attach(scene, this.root, "rhoop2",  0.10, 0.68, 0.10,  0.60, CABIN_Y + 0.10, -0.72, rollMat);
+    attach(scene, this.root, "rbar",    1.30, 0.09, 0.09,  0,    CABIN_Y + 0.44, -0.72, rollMat);
+    // Rear wing (two uprights + flat plate)
+    const wingY = BODY_Y + 0.66;
+    attach(scene, this.root, "wu1",   0.08, 0.50, 0.08, -0.60, BODY_Y + 0.25, rearAxleZ - 0.10, bumperMat);
+    attach(scene, this.root, "wu2",   0.08, 0.50, 0.08,  0.60, BODY_Y + 0.25, rearAxleZ - 0.10, bumperMat);
+    attach(scene, this.root, "wing",  1.36, 0.08, 0.46,  0,    wingY,          rearAxleZ - 0.10, darkMat);
+    // Number panel on sides
+    for (const s of [-1, 1] as const) {
+      attach(scene, this.root, `np${s}`, 0.06, 0.30, 0.90, s * 0.97, BODY_Y + 0.22, -0.06, numMat);
+    }
+    // Bumpers
+    attach(scene, this.root, "fbump", 1.96, 0.24, 0.18, 0, BODY_Y + 0.04, frontAxleZ + 0.24, bumperMat);
+    attach(scene, this.root, "rbump", 1.92, 0.22, 0.16, 0, BODY_Y + 0.04, rearAxleZ  - 0.20, bumperMat);
+    // Lights
+    for (const s of [-1, 1] as const) {
+      attach(scene, this.root, `hl${s}`, 0.28, 0.14, 0.06, s * 0.68, BODY_Y + 0.08, frontAxleZ + 0.12, lightMat);
+      attach(scene, this.root, `tl${s}`, 0.24, 0.12, 0.06, s * 0.68, BODY_Y + 0.08, rearAxleZ  - 0.10, brakeMat);
+    }
+
+    this.addWheels(scene, axleX, axleY, frontAxleZ, rearAxleZ,
+      new Color3(0.85, 0.82, 0.10), new Color3(0.14, 0.14, 0.14));
+  }
+
+  // ── 4. Rock Crawler ───────────────────────────────────────────────────────
+
+  private buildCrawler(scene: Scene): void {
+    const { axleY, frontAxleZ, rearAxleZ, axleX } = this.cfg;
+    const bodyC   = hex(this.cfg.bodyColorHex);
+    const BODY_Y  = axleY + 0.34;
+    const CABIN_Y = BODY_Y + 0.58 + 0.44;
+
+    const bodyMat   = mat(scene, "body",   bodyC);
+    const darkMat   = mat(scene, "dark",   bodyC.scale(0.70));
+    const glassMat  = mat(scene, "glass",  new Color3(0.35, 0.60, 0.88), 0.05);
+    const bumperMat = mat(scene, "bumper", new Color3(0.20, 0.18, 0.16), 0.3);
+    const rollMat   = mat(scene, "roll",   new Color3(0.36, 0.34, 0.30), 0.4);
+    const rackMat   = mat(scene, "rack",   new Color3(0.24, 0.22, 0.18), 0.5);
+    const tireMat   = mat(scene, "tire",   new Color3(0.13, 0.13, 0.12));
+    const lightMat  = mat(scene, "light",  new Color3(1.0, 0.96, 0.82), 0.0, new Color3(0.9, 0.85, 0.6));
+    const brakeMat  = mat(scene, "brake",  new Color3(0.85, 0.18, 0.12), 0.0, new Color3(0.6, 0.05, 0.05));
+
+    // Boxy body
+    attach(scene, this.root, "body",  2.12, 0.60, 2.72, 0, BODY_Y, 0, bodyMat);
+    // Hood
+    attach(scene, this.root, "hood",  1.88, 0.16, 1.10, 0, BODY_Y + 0.38, 0.70, darkMat);
+    // Boxy cabin
+    attach(scene, this.root, "cabin", 2.08, 0.88, 1.72, 0, CABIN_Y, -0.14, bodyMat);
+    attach(scene, this.root, "ws",    1.72, 0.66, 0.08, 0, CABIN_Y + 0.02, 0.74, glassMat, [-0.20, 0, 0]);
+    attach(scene, this.root, "rw",    1.68, 0.58, 0.08, 0, CABIN_Y + 0.02, -1.00, glassMat, [0.20, 0, 0]);
+    for (const s of [-1, 1] as const) {
+      attach(scene, this.root, `sw${s}`, 0.08, 0.56, 1.30, s * 1.05, CABIN_Y + 0.06, -0.14, glassMat);
+    }
+    // Roof rack (longitudinal + cross bars)
+    const rackY = CABIN_Y + 0.48;
+    attach(scene, this.root, "rl1", 0.06, 0.05, 1.52, -0.72, rackY, -0.14, rackMat);
+    attach(scene, this.root, "rl2", 0.06, 0.05, 1.52,  0.72, rackY, -0.14, rackMat);
+    attach(scene, this.root, "rc1", 1.52, 0.05, 0.06,  0, rackY, 0.40, rackMat);
+    attach(scene, this.root, "rc2", 1.52, 0.05, 0.06,  0, rackY, -0.14, rackMat);
+    attach(scene, this.root, "rc3", 1.52, 0.05, 0.06,  0, rackY, -0.68, rackMat);
+    // Spare tyre on back (cylinder laid flat)
+    const spare = MeshBuilder.CreateCylinder("spare",
+      { diameter: this.cfg.wheelRadius * 1.9, height: 0.28, tessellation: 16 }, scene);
+    spare.rotation.x = Math.PI / 2;
+    spare.position.set(0, BODY_Y + 0.30, rearAxleZ - 0.28);
+    spare.parent = this.root;
+    spare.material = tireMat;
+    // Heavy front bumper + skid plate
+    attach(scene, this.root, "fbump",  2.30, 0.40, 0.26, 0, BODY_Y + 0.08, frontAxleZ + 0.26, bumperMat);
+    attach(scene, this.root, "skid",   1.90, 0.10, 0.70, 0, BODY_Y - 0.24, frontAxleZ - 0.02, bumperMat);
+    attach(scene, this.root, "rbump",  2.26, 0.34, 0.22, 0, BODY_Y + 0.08, rearAxleZ  - 0.24, bumperMat);
+    // Fender flares
+    for (const s of [-1, 1] as const) {
+      attach(scene, this.root, `ffF${s}`, 0.22, 0.28, 0.90, s * 1.14, BODY_Y + 0.14, frontAxleZ - 0.04, darkMat);
+      attach(scene, this.root, `ffR${s}`, 0.22, 0.28, 0.90, s * 1.14, BODY_Y + 0.14, rearAxleZ  + 0.04, darkMat);
+    }
+    // Roll cage visible through open sides
+    attach(scene, this.root, "rbar", 2.02, 0.10, 0.10, 0, CABIN_Y + 0.48, -0.14, rollMat);
+    // Lights
+    for (const s of [-1, 1] as const) {
+      attach(scene, this.root, `hl${s}`, 0.30, 0.22, 0.08, s * 0.76, BODY_Y + 0.16, frontAxleZ + 0.16, lightMat);
+      attach(scene, this.root, `tl${s}`, 0.26, 0.18, 0.08, s * 0.76, BODY_Y + 0.14, rearAxleZ  - 0.14, brakeMat);
+    }
+
+    this.addWheels(scene, axleX, axleY, frontAxleZ, rearAxleZ,
+      new Color3(0.62, 0.60, 0.56), new Color3(0.14, 0.13, 0.12));
+  }
+
+  // ── Shared wheel builder ──────────────────────────────────────────────────
+
+  private addWheels(
+    scene: Scene,
+    axleX: number, axleY: number, frontAxleZ: number, rearAxleZ: number,
+    rimColor: Color3, tireColor: Color3,
+  ): void {
+    const { wheelRadius: wr, wheelThickness: wt } = this.cfg;
+    const tireMat = mat(scene, "tire", tireColor);
+    const rimMat  = mat(scene, "rim",  rimColor, 0.55);
+
+    const axlePositions: [number, number, number][] = [
+      [ axleX, axleY, frontAxleZ],
+      [-axleX, axleY, frontAxleZ],
+      [ axleX, axleY, rearAxleZ],
+      [-axleX, axleY, rearAxleZ],
+    ];
+
+    for (const [x, y, z] of axlePositions) {
+      const hub = new TransformNode("wheelHub", scene);
+      hub.parent = this.root;
+      hub.position.set(x, y, z);
+
+      const tyre = MeshBuilder.CreateCylinder("tyre",
+        { diameter: wr * 2, height: wt, tessellation: 20 }, scene);
+      tyre.rotation.z = Math.PI / 2;
+      tyre.parent = hub;
+      tyre.material = tireMat;
+
+      const inset = x > 0 ? -0.08 : 0.08;
+      const rim = MeshBuilder.CreateCylinder("rim",
+        { diameter: wr * 1.15, height: 0.06, tessellation: 16 }, scene);
+      rim.rotation.z = Math.PI / 2;
+      rim.position.x = inset;
+      rim.parent = hub;
+      rim.material = rimMat;
+
+      // Valve-stem marker so wheel spin is visible
+      const outerFace = x > 0 ? wt / 2 + 0.01 : -(wt / 2 + 0.01);
+      const valve = MeshBuilder.CreateBox("valve",
+        { width: 0.04, height: wr * 0.27, depth: 0.07 }, scene);
+      valve.position.set(outerFace, wr * 0.70, 0);
+      valve.parent = hub;
+      valve.material = rimMat;
+
+      this.wheels.push(hub);
+    }
+  }
 }
 
-function box(scene: Scene, name: string, w: number, h: number, d: number): Mesh {
-  return MeshBuilder.CreateBox(name, { width: w, height: h, depth: d }, scene);
+// ── Module helpers ────────────────────────────────────────────────────────────
+
+function attach(
+  scene: Scene,
+  root: TransformNode,
+  name: string,
+  w: number, h: number, d: number,
+  x: number, y: number, z: number,
+  material: StandardMaterial,
+  rotation?: [number, number, number],
+): Mesh {
+  const m = MeshBuilder.CreateBox(name, { width: w, height: h, depth: d }, scene);
+  m.position.set(x, y, z);
+  if (rotation) [m.rotation.x, m.rotation.y, m.rotation.z] = rotation;
+  m.parent = root;
+  m.material = material;
+  return m;
 }
 
 function mat(
@@ -413,13 +520,18 @@ function mat(
   specularStrength = 0.15,
   emissive?: Color3,
 ): StandardMaterial {
-  const m = new StandardMaterial(`mat_${name}`, scene);
+  const m = new StandardMaterial(`mat_${name}_${Math.random().toString(36).slice(2, 6)}`, scene);
   m.diffuseColor  = diffuse;
   m.specularColor = new Color3(specularStrength, specularStrength, specularStrength);
-  if (emissive) {
-    m.emissiveColor = emissive;
-  }
+  if (emissive) m.emissiveColor = emissive;
   return m;
+}
+
+function hex(h: string): Color3 {
+  const r = parseInt(h.slice(1, 3), 16) / 255;
+  const g = parseInt(h.slice(3, 5), 16) / 255;
+  const b = parseInt(h.slice(5, 7), 16) / 255;
+  return new Color3(r, g, b);
 }
 
 function clamp(v: number, lo: number, hi: number): number {

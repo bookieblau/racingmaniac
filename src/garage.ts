@@ -1,0 +1,67 @@
+import { CAR_CONFIGS, CarTypeId } from "./carTypes";
+
+const ICONS: Record<CarTypeId, string> = {
+  buggy:   "🏎️",
+  monster: "🚛",
+  racer:   "⚡",
+  crawler: "🪨",
+};
+
+const STAT_COLORS: [string, string, string] = ["#f0c020", "#40c8f0", "#f05030"];
+
+function statBar(label: string, value: number, color: string): string {
+  return `
+    <div class="g-stat">
+      <span class="g-stat-label">${label}</span>
+      <div class="g-stat-track">
+        <div class="g-stat-fill" style="width:${value}%;background:${color}"></div>
+      </div>
+    </div>`;
+}
+
+function cardHTML(id: CarTypeId): string {
+  const c = CAR_CONFIGS[id];
+  return `
+  <div class="g-card" data-car="${id}">
+    <div class="g-card-header" style="background:${c.bodyColorHex}">
+      <span class="g-icon">${ICONS[id]}</span>
+      <span class="g-car-name">${c.name}</span>
+    </div>
+    <div class="g-card-body">
+      <p class="g-desc">${c.description}</p>
+      ${statBar("SPEED",    c.statSpeed,    STAT_COLORS[0])}
+      ${statBar("HANDLING", c.statHandling, STAT_COLORS[1])}
+      ${statBar("POWER",    c.statPower,    STAT_COLORS[2])}
+      <button class="g-drive-btn" data-car="${id}">DRIVE!</button>
+    </div>
+  </div>`;
+}
+
+export function showGarage(): Promise<CarTypeId> {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.id = "garage";
+    overlay.innerHTML = `
+      <div class="g-inner">
+        <h1 class="g-title">RACING MANIAC</h1>
+        <p class="g-subtitle">Choose Your Ride</p>
+        <div class="g-cards">
+          ${(["buggy", "monster", "racer", "crawler"] as CarTypeId[]).map(cardHTML).join("")}
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener("click", (e) => {
+      const target = (e.target as HTMLElement).closest<HTMLElement>("[data-car]");
+      if (!target) return;
+      const id = target.dataset.car as CarTypeId;
+      if (!CAR_CONFIGS[id]) return;
+
+      overlay.classList.add("g-fade-out");
+      overlay.addEventListener("transitionend", () => {
+        overlay.remove();
+        resolve(id);
+      }, { once: true });
+    });
+  });
+}
