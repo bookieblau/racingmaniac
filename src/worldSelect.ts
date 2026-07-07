@@ -19,7 +19,7 @@ export function showWorldSelect(): Promise<WorldId> {
               </div>
               <div class="g-card-body">
                 <p class="g-desc">${w.description}</p>
-                <button class="g-drive-btn" data-world="${id}">GO!</button>
+                <button type="button" class="g-drive-btn" data-world="${id}">GO!</button>
               </div>
             </div>`;
           }).join("")}
@@ -36,10 +36,12 @@ export function showWorldSelect(): Promise<WorldId> {
 
       e.preventDefault();
       e.stopPropagation();
-      document.body.classList.remove("menu-open");
       overlay.classList.add("g-fade-out");
       resolve(id);
-      overlay.addEventListener("transitionend", () => overlay.remove(), { once: true });
+      overlay.addEventListener("transitionend", () => {
+        overlay.remove();
+        document.body.classList.remove("menu-open");
+      }, { once: true });
     });
   });
 }

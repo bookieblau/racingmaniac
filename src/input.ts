@@ -15,18 +15,24 @@ const KEY_MAP: Record<string, DriveAction | undefined> = {
 
 export type DriveAction = "forward" | "backward" | "left" | "right";
 
+const ARM_DELAY_MS = 600;
+
 export class InputManager {
   private readonly active = new Set<DriveAction>();
+  private enabled = false;
+  private armTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("keyup", this.onKeyUp);
     window.addEventListener("blur", this.onBlur);
+    window.addEventListener("pointerup", this.onPointerUp);
+    window.addEventListener("pointercancel", this.onPointerUp);
     this.wireTouchButtons();
   }
 
   isActive(action: DriveAction): boolean {
-    return this.active.has(action);
+    return this.enabled && this.active.has(action);
   }
 
   /** Drop all held inputs — call after menus close to prevent stuck keys/buttons. */
@@ -37,37 +43,54 @@ export class InputManager {
     });
   }
 
+  /**
+   * Re-enable driving input after a short delay so menu taps cannot leak
+   * through to steering / throttle controls underneath.
+   */
+  arm(): void {
+    this.enabled = false;
+    this.clear();
+    if (this.armTimer !== null) clearTimeout(this.armTimer);
+    this.armTimer = setTimeout(() => {
+      this.clear();
+      this.enabled = true;
+      this.armTimer = null;
+    }, ARM_DELAY_MS);
+  }
+
   dispose(): void {
+    if (this.armTimer !== null) clearTimeout(this.armTimer);
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("keyup", this.onKeyUp);
     window.removeEventListener("blur", this.onBlur);
+    window.removeEventListener("pointerup", this.onPointerUp);
+    window.removeEventListener("pointercancel", this.onPointerUp);
   }
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
+    if (!this.enabled) return;
     const action = KEY_MAP[event.key];
-    if (!action) {
-      return;
-    }
+    if (!action) return;
     this.active.add(action);
     event.preventDefault();
   };
 
   private readonly onKeyUp = (event: KeyboardEvent): void => {
     const action = KEY_MAP[event.key];
-    if (!action) {
-      return;
-    }
+    if (!action) return;
     this.active.delete(action);
-    event.preventDefault();
+    if (this.enabled) event.preventDefault();
   };
 
   private readonly onBlur = (): void => {
-    this.active.clear();
+    this.clear();
+  };
+
+  private readonly onPointerUp = (): void => {
+    if (!this.enabled) this.clear();
   };
 
   // ── On-screen touch buttons ────────────────────────────────────────────────
-  // Any element with data-action="forward|backward|left|right" is wired up.
-  // Touch events are used on mobile; mouse events allow desktop testing.
 
   private wireTouchButtons(): void {
     const VALID: Record<string, true> = { forward: true, backward: true, left: true, right: true };
@@ -77,18 +100,29 @@ export class InputManager {
       if (!VALID[raw]) return;
       const action = raw as DriveAction;
 
-      const press   = (): void => { this.active.add(action);    el.classList.add("pressed"); };
-      const release = (): void => { this.active.delete(action); el.classList.remove("pressed"); };
+      const press = (e: PointerEvent): void => {
+        if (!this.enabled) return;
+        e.preventDefault();
+        el.setPointerCapture(e.pointerId);
+        this.active.add(action);
+        el.classList.add("pressed");
+      };
 
-      // Touch — preventDefault stops the 300 ms click delay and scroll interference
-      el.addEventListener("touchstart",  (e) => { e.preventDefault(); press(); },   { passive: false });
-      el.addEventListener("touchend",    (e) => { e.preventDefault(); release(); }, { passive: false });
-      el.addEventListener("touchcancel", () => release());
+      const release = (e: PointerEvent): void => {
+        if (el.hasPointerCapture(e.pointerId)) {
+          el.releasePointerCapture(e.pointerId);
+        }
+        this.active.delete(action);
+        el.classList.remove("pressed");
+      };
 
-      // Mouse fallback (handy for desktop testing of the on-screen buttons)
-      el.addEventListener("mousedown",  press);
-      el.addEventListener("mouseup",    release);
-      el.addEventListener("mouseleave", release);
+      el.addEventListener("pointerdown", press);
+      el.addEventListener("pointerup", release);
+      el.addEventListener("pointercancel", release);
+      el.addEventListener("lostpointercapture", () => {
+        this.active.delete(action);
+        el.classList.remove("pressed");
+      });
     });
   }
 }

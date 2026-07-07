@@ -258,7 +258,9 @@
 
       body.menu-open #touch-controls,
       body.menu-open #change-car-btn,
-      body.menu-open #fullscreen-btn {
+      body.menu-open #fullscreen-btn,
+      body:has(#garage) #touch-controls,
+      body:has(#world-select) #touch-controls {
         pointer-events: none;
       }
 

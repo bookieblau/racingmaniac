@@ -36,7 +36,7 @@ function cardHTML(id: CarTypeId): string {
       ${statBar("SPEED",    c.statSpeed,    STAT_COLORS[0])}
       ${statBar("HANDLING", c.statHandling, STAT_COLORS[1])}
       ${statBar("POWER",    c.statPower,    STAT_COLORS[2])}
-      <button class="g-drive-btn" data-car="${id}">${btnLabel}</button>
+      <button type="button" class="g-drive-btn" data-car="${id}">${btnLabel}</button>
     </div>
   </div>`;
 }
@@ -69,10 +69,12 @@ export function showGarage(): Promise<CarTypeId> {
 
       e.preventDefault();
       e.stopPropagation();
-      document.body.classList.remove("menu-open");
       overlay.classList.add("g-fade-out");
       resolve(id);
-      overlay.addEventListener("transitionend", () => overlay.remove(), { once: true });
+      overlay.addEventListener("transitionend", () => {
+        overlay.remove();
+        document.body.classList.remove("menu-open");
+      }, { once: true });
     });
   });
 }
