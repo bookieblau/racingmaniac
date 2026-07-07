@@ -21,7 +21,7 @@ import { DustSystem } from "./dust";
 import { showGarage } from "./garage";
 import { CAR_CONFIGS } from "./carTypes";
 import { showWorldSelect } from "./worldSelect";
-import { buildWorld, getActiveWorldId, setActiveWorld } from "./worldContext";
+import { buildWorld, getActiveWorldId, getSpawnState, setActiveWorld } from "./worldContext";
 import {
   CITY_HEMI_DIFFUSE,
   CITY_HEMI_GROUND,
@@ -75,7 +75,7 @@ function startGame(carConfig: CarConfig): void {
   sun.diffuse = sunDiffuse;
   sun.specular = sunSpecular;
 
-  const car = new Car(scene, carConfig);
+  const car = new Car(scene, carConfig, getSpawnState());
 
   const camera = new FreeCamera("followCam", new Vector3(0, 6, -13), scene);
   camera.minZ = 0.1;

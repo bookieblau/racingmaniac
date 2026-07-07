@@ -8,33 +8,15 @@ export const CITY_BLOCK = 38;
 /** Width of each road strip along block edges. */
 export const CITY_ROAD = 10;
 
-/**
- * Mostly flat urban ground with subtle drainage ripples.
- * Roads sit at 0; sidewalks are +2 cm; lots are +1 cm.
- */
-export function terrainHeight(x: number, z: number): number {
-  const ripple =
-    Math.sin(x * 0.11 + 1.2) * 0.06 +
-    Math.sin(z * 0.09 - 0.8) * 0.05;
-
-  const lx = mod(x + TERRAIN_SIZE / 2, CITY_BLOCK);
-  const lz = mod(z + TERRAIN_SIZE / 2, CITY_BLOCK);
-  const onRoad = lx < CITY_ROAD || lz < CITY_ROAD;
-
-  const base = onRoad ? 0.0 : 0.01;
-  return base + ripple;
+/** Flat city ground — road markings are visual only (texture), not height steps. */
+export function terrainHeight(_x: number, _z: number): number {
+  return 0;
 }
 
 const NORMAL_SAMPLE = 1.0;
 
-export function terrainNormal(x: number, z: number, out = new Vector3()): Vector3 {
-  const heightLeft = terrainHeight(x - NORMAL_SAMPLE, z);
-  const heightRight = terrainHeight(x + NORMAL_SAMPLE, z);
-  const heightBack = terrainHeight(x, z - NORMAL_SAMPLE);
-  const heightFront = terrainHeight(x, z + NORMAL_SAMPLE);
-
-  out.set(heightLeft - heightRight, NORMAL_SAMPLE * 2, heightBack - heightFront);
-  out.normalize();
+export function terrainNormal(_x: number, _z: number, out = new Vector3()): Vector3 {
+  out.set(0, 1, 0);
   return out;
 }
 

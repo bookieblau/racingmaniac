@@ -104,7 +104,10 @@ export class Car {
 
     // Only steer when actually moving — prevents spin-in-place from stuck inputs.
     const steerDir = input.isActive("left") ? -1 : input.isActive("right") ? 1 : 0;
-    if (steerDir !== 0 && Math.abs(this.speed) > 0.5) {
+    // Bikes only steer while throttle is held — prevents ghost-steer circles.
+    const throttleHeld = input.isActive("forward") || input.isActive("backward");
+    const canSteer = this.cfg.kind !== "bike" || throttleHeld;
+    if (steerDir !== 0 && Math.abs(this.speed) > 0.5 && canSteer) {
       const speedFactor = Math.max(MIN_STEER_FACTOR, Math.abs(this.speed) / maxSpeed);
       this.heading += steerDir * steerSpeed * speedFactor * dt;
     }
@@ -282,15 +285,17 @@ export class Car {
       -MAX_ROLL, MAX_ROLL,
     );
 
+    const tiltBlend = this.cfg.kind === "bike" ? 4 : TILT_BLEND;
     const blend = 1 - Math.pow(0.001, deltaSeconds);
-    this.pitch += (targetPitch - this.pitch) * blend * TILT_BLEND;
-    this.roll  += (targetRoll  - this.roll)  * blend * TILT_BLEND;
+    this.pitch += (targetPitch - this.pitch) * blend * tiltBlend;
+    this.roll  += (targetRoll  - this.roll)  * blend * tiltBlend;
   }
 
   private syncTransform(): void {
     this.root.position.set(this.position.x, this.altitude, this.position.z);
-    this.root.rotationQuaternion = Quaternion.FromEulerAngles(
-      this.pitch, this.heading, this.roll,
+    // Yaw-pitch-roll order — avoids roll coupling into heading on flat city streets.
+    this.root.rotationQuaternion = Quaternion.RotationYawPitchRoll(
+      this.heading, this.pitch, this.roll,
     );
   }
 

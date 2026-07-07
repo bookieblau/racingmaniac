@@ -68,3 +68,11 @@ export function buildWorld(scene: Scene): void {
     setupDesertWorld(scene);
   }
 }
+
+/** Default spawn point per world (centre of a clear road intersection in the city). */
+export function getSpawnState(): { x: number; z: number; heading: number } {
+  if (activeWorldId === "city") {
+    return { x: -25, z: -25, heading: 0 };
+  }
+  return { x: 0, z: 0, heading: 0 };
+}
