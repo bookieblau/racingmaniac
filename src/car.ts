@@ -46,7 +46,11 @@ export class Car {
   private readonly position = new Vector3(0, 0, 0);
   private readonly scratchNormal = new Vector3();
 
-  constructor(scene: Scene, cfg: CarConfig) {
+  constructor(
+    scene: Scene,
+    cfg: CarConfig,
+    state?: { x: number; z: number; heading: number },
+  ) {
     this.cfg = cfg;
     this.wheelSampleOffsets = [
       [0, 0],
@@ -58,10 +62,16 @@ export class Car {
       [cfg.rearAxleZ,  -cfg.axleX],
     ];
 
+    if (state) {
+      this.position.x = state.x;
+      this.position.z = state.z;
+      this.heading     = state.heading;
+    }
+
     this.root = new TransformNode("carRoot", scene);
     this.buildVisuals(scene);
 
-    this.previousGroundY = this.sampleGround(0, 0, this.heading);
+    this.previousGroundY = this.sampleGround(this.position.x, this.position.z, this.heading);
     this.altitude = this.previousGroundY + cfg.carBottomOffset;
     this.syncTransform();
   }
@@ -146,6 +156,21 @@ export class Car {
   getMaxSpeed(): number       { return this.cfg.maxSpeed; }
   isAirborne(): boolean       { return this.airborne; }
   getCarName(): string        { return this.cfg.name; }
+
+  getState(): { x: number; z: number; heading: number } {
+    return { x: this.position.x, z: this.position.z, heading: this.heading };
+  }
+
+  dispose(): void {
+    for (const mesh of this.root.getChildMeshes()) {
+      if (mesh.material) mesh.material.dispose();
+      mesh.dispose();
+    }
+    for (const node of this.root.getChildTransformNodes()) {
+      node.dispose();
+    }
+    this.root.dispose();
+  }
 
   getWheelWorldPositions(): Vector3[] {
     const { axleX, axleY, frontAxleZ, rearAxleZ } = this.cfg;

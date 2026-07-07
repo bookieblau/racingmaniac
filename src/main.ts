@@ -75,12 +75,33 @@ function startGame(carConfig: CarConfig): void {
 
   hud.setCarName(carConfig.name);
 
+  // ── In-game car swap ──────────────────────────────────────────────────────
+  let activeCar = car;
+  let swapping = false;
+
+  const changeCarBtn = document.getElementById("change-car-btn");
+  if (changeCarBtn) {
+    changeCarBtn.addEventListener("click", () => {
+      if (swapping) return;
+      swapping = true;
+      const state = activeCar.getState();
+      showGarage().then((newId) => {
+        const oldCar = activeCar;
+        activeCar = new Car(scene, CAR_CONFIGS[newId], state);
+        oldCar.dispose();
+        chaseCamera.reset(activeCar);
+        hud.setCarName(CAR_CONFIGS[newId].name);
+        swapping = false;
+      }).catch(console.error);
+    });
+  }
+
   engine.runRenderLoop(() => {
     const deltaSeconds = engine.getDeltaTime() / 1000;
-    car.update(deltaSeconds, input);
-    chaseCamera.update(car, deltaSeconds);
-    hud.update(car);
-    dust.update(car);
+    activeCar.update(deltaSeconds, input);
+    chaseCamera.update(activeCar, deltaSeconds);
+    hud.update(activeCar);
+    dust.update(activeCar);
     scene.render();
   });
 

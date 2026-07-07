@@ -37,6 +37,21 @@ export class ChaseCamera {
     this.camera.setTarget(this.lookAt);
   }
 
+  reset(car: Car): void {
+    const start = car.getWorldPosition();
+    const heading = car.getHeading();
+    this.smoothedCarY = start.y;
+    this.lookAtY = start.y + 1.1;
+    this.smoothPosition.set(
+      start.x - Math.sin(heading) * FOLLOW_DISTANCE,
+      start.y + FOLLOW_HEIGHT,
+      start.z - Math.cos(heading) * FOLLOW_DISTANCE,
+    );
+    this.camera.position.copyFrom(this.smoothPosition);
+    this.lookAt.copyFrom(start);
+    this.camera.setTarget(this.lookAt);
+  }
+
   update(car: Car, deltaSeconds: number): void {
     const carPosition = car.getWorldPosition();
     const heading = car.getHeading();
