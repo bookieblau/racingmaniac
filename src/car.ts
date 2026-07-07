@@ -11,9 +11,7 @@ import {
 
 import { InputManager } from "./input";
 import { CarConfig } from "./carTypes";
-import { TERRAIN_SIZE, terrainHeight, terrainNormal } from "./terrain";
-
-const HALF_EXTENT = TERRAIN_SIZE / 2 - 4;
+import { getTerrainSize, terrainHeight, terrainNormal } from "./worldContext";
 
 // ── Shared physics constants (not configurable per car) ───────────────────────
 const GRAVITY              = 22;
@@ -33,6 +31,7 @@ export class Car {
   private readonly cfg: CarConfig;
   private readonly wheelSampleOffsets: ReadonlyArray<readonly [number, number]>;
 
+  private readonly halfExtent: number;
   private speed = 0;
   private heading = 0;
   private altitude = 0;
@@ -69,6 +68,8 @@ export class Car {
         [cfg.rearAxleZ,  -cfg.axleX],
       ];
     }
+
+    this.halfExtent = getTerrainSize() / 2 - 4;
 
     if (state) {
       this.position.x = state.x;
@@ -126,8 +127,8 @@ export class Car {
     // ── Move ────────────────────────────────────────────────────────────────
     this.position.x += Math.sin(this.heading) * this.speed * deltaSeconds;
     this.position.z += Math.cos(this.heading) * this.speed * deltaSeconds;
-    this.position.x = clamp(this.position.x, -HALF_EXTENT, HALF_EXTENT);
-    this.position.z = clamp(this.position.z, -HALF_EXTENT, HALF_EXTENT);
+    this.position.x = clamp(this.position.x, -this.halfExtent, this.halfExtent);
+    this.position.z = clamp(this.position.z, -this.halfExtent, this.halfExtent);
 
     // ── Vertical (jump / gravity) ────────────────────────────────────────────
     const groundY = this.sampleGround(this.position.x, this.position.z, this.heading);
