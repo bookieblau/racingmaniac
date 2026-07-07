@@ -20,6 +20,8 @@ import {
 import { createDesertSky } from "./sky";
 import { createDesertTerrain } from "./terrainMesh";
 import { populateWorld } from "./world";
+import { TrackSystem } from "./tracks";
+import { DustSystem } from "./dust";
 
 function showError(message: string): void {
   const element = document.getElementById("error");
@@ -70,14 +72,18 @@ function startGame(): void {
   scene.activeCamera = camera;
 
   const chaseCamera = new ChaseCamera(camera, car);
-  const input = new InputManager();
-  const hud = new Hud();
+  const input  = new InputManager();
+  const hud    = new Hud();
+  const tracks = new TrackSystem(scene);
+  const dust   = new DustSystem(scene);
 
   engine.runRenderLoop(() => {
     const deltaSeconds = engine.getDeltaTime() / 1000;
     car.update(deltaSeconds, input);
     chaseCamera.update(car, deltaSeconds);
     hud.update(car);
+    tracks.update(car);
+    dust.update(car);
     scene.render();
   });
 

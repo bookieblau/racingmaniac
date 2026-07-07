@@ -171,6 +171,35 @@ export class Car {
     return this.airborne;
   }
 
+  /**
+   * World-space positions of all four wheel hubs in order:
+   * [0] right-front, [1] left-front, [2] right-rear, [3] left-rear.
+   * Y is approximate (altitude + axle height) — good enough for dust/tracks.
+   */
+  getWheelWorldPositions(): Vector3[] {
+    const px = this.root.position.x;
+    const py = this.root.position.y;
+    const pz = this.root.position.z;
+    const sinH = Math.sin(this.heading);
+    const cosH = Math.cos(this.heading);
+
+    // local axle offsets: [right(+X), up(+Y), forward(+Z)]
+    const axles: [number, number, number][] = [
+      [ AXLE_X,  AXLE_Y, FRONT_AXLE_Z],
+      [-AXLE_X,  AXLE_Y, FRONT_AXLE_Z],
+      [ AXLE_X,  AXLE_Y, REAR_AXLE_Z],
+      [-AXLE_X,  AXLE_Y, REAR_AXLE_Z],
+    ];
+
+    return axles.map(([lx, ly, lz]) =>
+      new Vector3(
+        px + lx * cosH + lz * sinH,
+        py + ly,
+        pz - lx * sinH + lz * cosH,
+      ),
+    );
+  }
+
   // ── Build visuals ──────────────────────────────────────────────────────────
 
   private buildVisuals(scene: Scene): void {
