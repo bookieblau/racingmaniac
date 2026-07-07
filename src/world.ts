@@ -320,6 +320,5 @@ export function placeMesas(scene: Scene): void {
 export function populateWorld(scene: Scene): void {
   createFarGround(scene);
   placeMesas(scene);
-  placeRocks(scene);
   placeCacti(scene);
 }
