@@ -6,8 +6,8 @@ export function configureSceneAtmosphere(scene: Scene): void {
   // Linear fog keeps the car readable while the horizon still fades out.
   scene.fogMode = Scene.FOGMODE_LINEAR;
   scene.fogColor = new Color3(0.9, 0.78, 0.56);
-  scene.fogStart = 130;
-  scene.fogEnd = 300;
+  scene.fogStart = 260;
+  scene.fogEnd = 600;
 }
 
 export function getSunDirection(): Vector3 {

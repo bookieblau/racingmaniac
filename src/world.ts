@@ -43,7 +43,7 @@ function makeMat(scene: Scene, name: string, color: Color3, specular = 0.06): St
 export function createFarGround(scene: Scene): void {
   const plane = MeshBuilder.CreateGround(
     "farGround",
-    { width: 700, height: 700 },
+    { width: 1400, height: 1400 },
     scene,
   );
   // 2 cm below the terrain's DESERT_FLOOR so z-fighting can't occur
@@ -108,7 +108,7 @@ export function placeRocks(scene: Scene): void {
 // the material is applied directly and reliably without any instance
 // material-inheritance ambiguity.
 
-const CACTUS_COUNT = 28;
+const CACTUS_COUNT = 70;
 
 function makeCactusMat(scene: Scene): StandardMaterial {
   const m = new StandardMaterial("cactusMat", scene);
@@ -192,21 +192,29 @@ interface MesaDef {
 
 const MESA_DEFS: MesaDef[] = [
   // North — large imposing butte
-  { angle: 0.15, distance: 178, skirtR: 72, bodyR: 52, capR: 36, skirtH: 6,  bodyH: 34, capH: 12, colorShift:  0.00 },
+  { angle: 0.15, distance: 355, skirtR: 80, bodyR: 58, capR: 40, skirtH: 7,  bodyH: 38, capH: 13, colorShift:  0.00 },
+  // NNE — mid-distance spire
+  { angle: 0.50, distance: 290, skirtR: 46, bodyR: 30, capR: 18, skirtH: 4,  bodyH: 36, capH:  9, colorShift:  0.04 },
   // NE — tall narrow spire
-  { angle: 0.85, distance: 168, skirtR: 52, bodyR: 36, capR: 22, skirtH: 5,  bodyH: 42, capH: 10, colorShift:  0.05 },
+  { angle: 0.85, distance: 335, skirtR: 58, bodyR: 40, capR: 24, skirtH: 6,  bodyH: 46, capH: 11, colorShift:  0.05 },
   // East — wide low mesa
-  { angle: 1.65, distance: 185, skirtR: 90, bodyR: 64, capR: 46, skirtH: 5,  bodyH: 22, capH: 14, colorShift: -0.03 },
+  { angle: 1.65, distance: 370, skirtR: 98, bodyR: 70, capR: 50, skirtH: 6,  bodyH: 24, capH: 15, colorShift: -0.03 },
+  // ESE — medium butte
+  { angle: 2.10, distance: 305, skirtR: 64, bodyR: 44, capR: 28, skirtH: 5,  bodyH: 32, capH: 10, colorShift: -0.01 },
   // SE — tall narrow spire
-  { angle: 2.55, distance: 170, skirtR: 44, bodyR: 28, capR: 16, skirtH: 4,  bodyH: 48, capH:  9, colorShift:  0.02 },
+  { angle: 2.55, distance: 340, skirtR: 50, bodyR: 32, capR: 18, skirtH: 5,  bodyH: 52, capH: 10, colorShift:  0.02 },
   // South — broad distant butte
-  { angle: 3.30, distance: 192, skirtR: 80, bodyR: 58, capR: 40, skirtH: 6,  bodyH: 28, capH: 13, colorShift: -0.02 },
+  { angle: 3.30, distance: 385, skirtR: 88, bodyR: 64, capR: 44, skirtH: 7,  bodyH: 30, capH: 14, colorShift: -0.02 },
+  // SSW — smaller formation
+  { angle: 3.80, distance: 295, skirtR: 50, bodyR: 34, capR: 20, skirtH: 4,  bodyH: 30, capH:  9, colorShift:  0.01 },
   // SW
-  { angle: 4.10, distance: 172, skirtR: 60, bodyR: 42, capR: 28, skirtH: 5,  bodyH: 38, capH: 11, colorShift:  0.04 },
+  { angle: 4.10, distance: 344, skirtR: 66, bodyR: 46, capR: 30, skirtH: 6,  bodyH: 42, capH: 12, colorShift:  0.04 },
   // West — giant landmark
-  { angle: 4.90, distance: 188, skirtR: 96, bodyR: 70, capR: 50, skirtH: 7,  bodyH: 30, capH: 15, colorShift:  0.00 },
+  { angle: 4.90, distance: 376, skirtR: 105, bodyR: 76, capR: 54, skirtH: 8, bodyH: 34, capH: 16, colorShift:  0.00 },
   // NW
-  { angle: 5.65, distance: 165, skirtR: 56, bodyR: 38, capR: 24, skirtH: 5,  bodyH: 36, capH: 10, colorShift:  0.03 },
+  { angle: 5.65, distance: 330, skirtR: 62, bodyR: 42, capR: 26, skirtH: 5,  bodyH: 40, capH: 11, colorShift:  0.03 },
+  // NNW — low wide plateau
+  { angle: 6.00, distance: 285, skirtR: 74, bodyR: 52, capR: 36, skirtH: 5,  bodyH: 20, capH: 12, colorShift: -0.02 },
 ];
 
 export function placeMesas(scene: Scene): void {

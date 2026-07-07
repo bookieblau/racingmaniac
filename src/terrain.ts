@@ -76,5 +76,5 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-export const TERRAIN_SIZE = 220;
-export const TERRAIN_SUBDIVISIONS = 128;
+export const TERRAIN_SIZE = 440;
+export const TERRAIN_SUBDIVISIONS = 200;
