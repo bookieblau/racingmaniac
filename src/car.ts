@@ -25,13 +25,8 @@ const GROUND_EPSILON = 0.05;
 const MAX_VERTICAL_VELOCITY = 14;
 
 // Liftoff: terrain must drop at this rate (m/s) AND car speed must exceed minimum
-const LIFTOFF_THRESHOLD  = 10;  // m/s of ground-fall rate
+const LIFTOFF_THRESHOLD  = 15;  // m/s of ground-fall rate
 const LIFTOFF_MIN_SPEED  = 7;   // m/s car speed required for liftoff
-
-// Suspension bounce: when terrain rises sharply the car gets a brief kick upward
-const BOUNCE_RISE_MIN  = 0.10;  // m terrain rise per frame to trigger bounce
-const BOUNCE_VEL_SCALE = 5.0;   // multiplier: rise_m → upward m/s
-const BOUNCE_VEL_MAX   = 1.8;   // cap on bounce velocity (m/s)
 
 const TILT_BLEND = 8;
 const AIR_TILT_DECAY = 6;
@@ -121,22 +116,15 @@ export class Car {
     const groundFallRate = (groundY - this.previousGroundY) / deltaSeconds;
 
     if (!this.airborne) {
-      // Liftoff: terrain falls away faster than the car can naturally follow
+      // Liftoff: terrain falls away faster than the car can naturally follow at crests.
       if (this.speed >= LIFTOFF_MIN_SPEED && groundFallRate < -LIFTOFF_THRESHOLD) {
         this.airborne = true;
         this.verticalVelocity = 0;
       } else {
-        // Stay on ground — suspension absorbs bumps
-        const rise = groundContact - this.altitude;  // +ve when terrain rose
+        // Stay firmly on ground — snap altitude to terrain contact point.
         this.altitude = groundContact;
-        if (rise > BOUNCE_RISE_MIN && this.speed > 4) {
-          // Terrain rose sharply: brief suspension kick upward
-          this.verticalVelocity = Math.min(rise * BOUNCE_VEL_SCALE, BOUNCE_VEL_MAX);
-          this.airborne = true;  // let gravity arc it back down naturally
-        } else {
-          this.verticalVelocity = 0;
-          this.airborne = false;
-        }
+        this.verticalVelocity = 0;
+        this.airborne = false;
       }
     } else {
       this.verticalVelocity = Math.max(
