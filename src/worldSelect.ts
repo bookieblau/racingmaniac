@@ -25,6 +25,7 @@ export function showWorldSelect(): Promise<WorldId> {
           }).join("")}
         </div>
       </div>`;
+    document.body.classList.add("menu-open");
     document.body.appendChild(overlay);
 
     overlay.addEventListener("click", (e) => {
@@ -33,11 +34,12 @@ export function showWorldSelect(): Promise<WorldId> {
       const id = target.dataset.world as WorldId;
       if (!WORLD_CONFIGS[id]) return;
 
+      e.preventDefault();
+      e.stopPropagation();
+      document.body.classList.remove("menu-open");
       overlay.classList.add("g-fade-out");
-      overlay.addEventListener("transitionend", () => {
-        overlay.remove();
-        resolve(id);
-      }, { once: true });
+      resolve(id);
+      overlay.addEventListener("transitionend", () => overlay.remove(), { once: true });
     });
   });
 }

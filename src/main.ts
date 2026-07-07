@@ -83,6 +83,7 @@ function startGame(carConfig: CarConfig): void {
 
   const chaseCamera = new ChaseCamera(camera, car);
   const input = new InputManager();
+  input.clear();
   const hud   = new Hud();
   const dust  = new DustSystem(scene);
 
@@ -98,12 +99,14 @@ function startGame(carConfig: CarConfig): void {
     changeCarBtn.addEventListener("click", () => {
       if (swapping) return;
       swapping = true;
+      input.clear();
       const state = activeCar.getState();
       showGarage().then((newId) => {
         const oldCar = activeCar;
         activeCar = new Car(scene, CAR_CONFIGS[newId], state);
         oldCar.dispose();
         chaseCamera.reset(activeCar);
+        input.clear();
         hud.setCarName(`${CAR_CONFIGS[newId].name} · ${worldName}`);
         swapping = false;
       }).catch(console.error);

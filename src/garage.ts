@@ -58,6 +58,7 @@ export function showGarage(): Promise<CarTypeId> {
           ${BIKE_IDS.map(cardHTML).join("")}
         </div>
       </div>`;
+    document.body.classList.add("menu-open");
     document.body.appendChild(overlay);
 
     overlay.addEventListener("click", (e) => {
@@ -66,11 +67,12 @@ export function showGarage(): Promise<CarTypeId> {
       const id = target.dataset.car as CarTypeId;
       if (!CAR_CONFIGS[id]) return;
 
+      e.preventDefault();
+      e.stopPropagation();
+      document.body.classList.remove("menu-open");
       overlay.classList.add("g-fade-out");
-      overlay.addEventListener("transitionend", () => {
-        overlay.remove();
-        resolve(id);
-      }, { once: true });
+      resolve(id);
+      overlay.addEventListener("transitionend", () => overlay.remove(), { once: true });
     });
   });
 }

@@ -29,6 +29,14 @@ export class InputManager {
     return this.active.has(action);
   }
 
+  /** Drop all held inputs — call after menus close to prevent stuck keys/buttons. */
+  clear(): void {
+    this.active.clear();
+    document.querySelectorAll<HTMLElement>(".touch-btn.pressed").forEach((el) => {
+      el.classList.remove("pressed");
+    });
+  }
+
   dispose(): void {
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("keyup", this.onKeyUp);

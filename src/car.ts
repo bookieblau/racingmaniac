@@ -87,24 +87,26 @@ export class Car {
 
   update(deltaSeconds: number, input: InputManager): void {
     const { maxSpeed, acceleration, brake, steerSpeed } = this.cfg;
+    // Guard against huge first-frame deltas after menu pauses.
+    const dt = Math.min(deltaSeconds, 0.05);
 
     // ── Throttle / brake ────────────────────────────────────────────────────
     if (input.isActive("forward")) {
-      this.speed = Math.min(this.speed + acceleration * deltaSeconds, maxSpeed);
+      this.speed = Math.min(this.speed + acceleration * dt, maxSpeed);
     } else if (input.isActive("backward")) {
-      this.speed = Math.max(this.speed - brake * deltaSeconds, -maxSpeed * 0.45);
+      this.speed = Math.max(this.speed - brake * dt, -maxSpeed * 0.45);
     } else {
       const drag = this.speed > 0 ? -14 : 14;
-      const next = this.speed + drag * deltaSeconds;
+      const next = this.speed + drag * dt;
       this.speed =
         Math.sign(this.speed) !== Math.sign(next) || Math.abs(next) < 0.2 ? 0 : next;
     }
 
-    // ── Steering ────────────────────────────────────────────────────────────
+    // Only steer when actually moving — prevents spin-in-place from stuck inputs.
     const steerDir = input.isActive("left") ? -1 : input.isActive("right") ? 1 : 0;
-    if (steerDir !== 0) {
+    if (steerDir !== 0 && Math.abs(this.speed) > 0.5) {
       const speedFactor = Math.max(MIN_STEER_FACTOR, Math.abs(this.speed) / maxSpeed);
-      this.heading += steerDir * steerSpeed * speedFactor * deltaSeconds;
+      this.heading += steerDir * steerSpeed * speedFactor * dt;
     }
 
     // ── Slope grip ───────────────────────────────────────────────────────────
@@ -120,13 +122,13 @@ export class Car {
         maxSpeed * (1.0 - fwdSlopeSin * this.cfg.slopeDragMult),
       );
       if (this.speed > uphillCap) {
-        this.speed = Math.max(uphillCap, this.speed - 60 * deltaSeconds);
+        this.speed = Math.max(uphillCap, this.speed - 60 * dt);
       }
     }
 
     // ── Move ────────────────────────────────────────────────────────────────
-    this.position.x += Math.sin(this.heading) * this.speed * deltaSeconds;
-    this.position.z += Math.cos(this.heading) * this.speed * deltaSeconds;
+    this.position.x += Math.sin(this.heading) * this.speed * dt;
+    this.position.z += Math.cos(this.heading) * this.speed * dt;
     this.position.x = clamp(this.position.x, -this.halfExtent, this.halfExtent);
     this.position.z = clamp(this.position.z, -this.halfExtent, this.halfExtent);
 
@@ -137,7 +139,7 @@ export class Car {
     const groundContact = groundY + this.cfg.carBottomOffset + tiltLift;
 
     // Rate at which the terrain is dropping under the car (m/s, negative = falling away)
-    const groundFallRate = (groundY - this.previousGroundY) / deltaSeconds;
+    const groundFallRate = (groundY - this.previousGroundY) / dt;
 
     if (!this.airborne) {
       if (this.speed >= LIFTOFF_MIN_SPEED && groundFallRate < -LIFTOFF_THRESHOLD) {
@@ -150,10 +152,10 @@ export class Car {
       }
     } else {
       this.verticalVelocity = Math.max(
-        this.verticalVelocity - GRAVITY * deltaSeconds,
+        this.verticalVelocity - GRAVITY * dt,
         -MAX_VERTICAL_VELOCITY,
       );
-      this.altitude += this.verticalVelocity * deltaSeconds;
+      this.altitude += this.verticalVelocity * dt;
 
       if (this.altitude <= groundContact) {
         this.altitude = groundContact;
@@ -165,13 +167,13 @@ export class Car {
     }
 
     // ── Wheel spin ──────────────────────────────────────────────────────────
-    this.wheelRotation += (this.speed / this.cfg.wheelRadius) * deltaSeconds;
+    this.wheelRotation += (this.speed / this.cfg.wheelRadius) * dt;
     const spinQ = Quaternion.FromEulerAngles(this.wheelRotation, 0, 0);
     for (const hub of this.wheels) {
       hub.rotationQuaternion = spinQ;
     }
 
-    this.updateTilt(deltaSeconds);
+    this.updateTilt(dt);
     this.previousGroundY = groundY;
     this.syncTransform();
   }
