@@ -1,6 +1,6 @@
 import { FreeCamera, Vector3 } from "@babylonjs/core";
 import { Car } from "./car";
-import { terrainHeight } from "./worldContext";
+import { terrainHeight } from "./terrain";
 
 const FOLLOW_DISTANCE = 14;
 const FOLLOW_HEIGHT = 6.5;

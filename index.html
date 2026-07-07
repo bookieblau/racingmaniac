@@ -259,37 +259,8 @@
       body.menu-open #touch-controls,
       body.menu-open #change-car-btn,
       body.menu-open #fullscreen-btn,
-      body:has(#garage) #touch-controls,
-      body:has(#world-select) #touch-controls {
+      body:has(#garage) #touch-controls {
         pointer-events: none;
-      }
-
-      #world-select {
-        position: fixed;
-        inset: 0;
-        z-index: 50;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: radial-gradient(ellipse at 50% 30%, #1c0f2e 0%, #0d0608 60%, #1a0c04 100%);
-        overflow-y: auto;
-        transition: opacity 0.35s ease;
-      }
-
-      #world-select.g-fade-out {
-        opacity: 0;
-      }
-
-      .g-world-header {
-        background: linear-gradient(135deg, #2a3a5c 0%, #1a2038 100%) !important;
-      }
-
-      #world-select .g-world-card[data-world="desert"] .g-world-header {
-        background: linear-gradient(135deg, #8a5020 0%, #5c3010 100%) !important;
-      }
-
-      #world-select .g-world-card[data-world="city"] .g-world-header {
-        background: linear-gradient(135deg, #3a4a6a 0%, #1e2840 100%) !important;
       }
 
       .g-inner {

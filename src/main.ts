@@ -20,21 +20,13 @@ import {
 import { DustSystem } from "./dust";
 import { showGarage } from "./garage";
 import { CAR_CONFIGS } from "./carTypes";
-import { showWorldSelect } from "./worldSelect";
-import { buildWorld, getActiveWorldId, getSpawnState, setActiveWorld } from "./worldContext";
-import {
-  CITY_HEMI_DIFFUSE,
-  CITY_HEMI_GROUND,
-  CITY_SUN_DIFFUSE,
-  CITY_SUN_SPECULAR,
-} from "./worlds/cityWorld";
 import {
   DESERT_HEMI_DIFFUSE,
   DESERT_HEMI_GROUND,
   DESERT_SUN_DIFFUSE,
   DESERT_SUN_SPECULAR,
+  setupDesertWorld,
 } from "./worlds/desertWorld";
-import { WORLD_CONFIGS } from "./worldTypes";
 
 function showError(message: string): void {
   const element = document.getElementById("error");
@@ -57,25 +49,19 @@ function startGame(carConfig: CarConfig): void {
   if (!engine.webGLVersion) throw new Error("WebGL is not available in this browser.");
 
   const scene = new Scene(engine);
-  buildWorld(scene);
-
-  const isCity = getActiveWorldId() === "city";
-  const hemiGround = isCity ? CITY_HEMI_GROUND : DESERT_HEMI_GROUND;
-  const hemiDiffuse = isCity ? CITY_HEMI_DIFFUSE : DESERT_HEMI_DIFFUSE;
-  const sunDiffuse = isCity ? CITY_SUN_DIFFUSE : DESERT_SUN_DIFFUSE;
-  const sunSpecular = isCity ? CITY_SUN_SPECULAR : DESERT_SUN_SPECULAR;
+  setupDesertWorld(scene);
 
   const hemi = new HemisphericLight("hemi", new Vector3(0, 1, 0), scene);
   hemi.intensity = HEMI_INTENSITY;
-  hemi.groundColor = hemiGround;
-  hemi.diffuse = hemiDiffuse;
+  hemi.groundColor = DESERT_HEMI_GROUND;
+  hemi.diffuse = DESERT_HEMI_DIFFUSE;
 
   const sun = new DirectionalLight("sun", getSunDirection(), scene);
   sun.intensity = SUN_INTENSITY;
-  sun.diffuse = sunDiffuse;
-  sun.specular = sunSpecular;
+  sun.diffuse = DESERT_SUN_DIFFUSE;
+  sun.specular = DESERT_SUN_SPECULAR;
 
-  const car = new Car(scene, carConfig, getSpawnState());
+  const car = new Car(scene, carConfig);
 
   const camera = new FreeCamera("followCam", new Vector3(0, 6, -13), scene);
   camera.minZ = 0.1;
@@ -87,8 +73,7 @@ function startGame(carConfig: CarConfig): void {
   const hud   = new Hud();
   const dust  = new DustSystem(scene);
 
-  const worldName = WORLD_CONFIGS[getActiveWorldId()].name;
-  hud.setCarName(`${carConfig.name} · ${worldName}`);
+  hud.setCarName(carConfig.name);
 
   // ── In-game car swap ──────────────────────────────────────────────────────
   let activeCar = car;
@@ -107,7 +92,7 @@ function startGame(carConfig: CarConfig): void {
         oldCar.dispose();
         chaseCamera.reset(activeCar);
         input.arm();
-        hud.setCarName(`${CAR_CONFIGS[newId].name} · ${worldName}`);
+        hud.setCarName(CAR_CONFIGS[newId].name);
         swapping = false;
       }).catch(console.error);
     });
@@ -128,8 +113,6 @@ function startGame(carConfig: CarConfig): void {
 
 async function runApp(): Promise<void> {
   try {
-    const worldId = await showWorldSelect();
-    setActiveWorld(worldId);
     const carTypeId = await showGarage();
     startGame(CAR_CONFIGS[carTypeId]);
   } catch (error) {

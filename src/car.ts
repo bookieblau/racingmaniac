@@ -11,7 +11,7 @@ import {
 
 import { InputManager } from "./input";
 import { CarConfig } from "./carTypes";
-import { getTerrainSize, terrainHeight, terrainNormal } from "./worldContext";
+import { TERRAIN_SIZE, terrainHeight, terrainNormal } from "./terrain";
 
 // ── Shared physics constants (not configurable per car) ───────────────────────
 const GRAVITY              = 22;
@@ -69,7 +69,7 @@ export class Car {
       ];
     }
 
-    this.halfExtent = getTerrainSize() / 2 - 4;
+    this.halfExtent = TERRAIN_SIZE / 2 - 4;
 
     if (state) {
       this.position.x = state.x;
