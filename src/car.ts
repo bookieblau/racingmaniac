@@ -52,15 +52,23 @@ export class Car {
     state?: { x: number; z: number; heading: number },
   ) {
     this.cfg = cfg;
-    this.wheelSampleOffsets = [
-      [0, 0],
-      [cfg.frontAxleZ,  0],
-      [cfg.rearAxleZ,   0],
-      [cfg.frontAxleZ,  cfg.axleX],
-      [cfg.frontAxleZ, -cfg.axleX],
-      [cfg.rearAxleZ,   cfg.axleX],
-      [cfg.rearAxleZ,  -cfg.axleX],
-    ];
+    if (cfg.kind === "bike") {
+      this.wheelSampleOffsets = [
+        [0, 0],
+        [cfg.frontAxleZ, 0],
+        [cfg.rearAxleZ, 0],
+      ];
+    } else {
+      this.wheelSampleOffsets = [
+        [0, 0],
+        [cfg.frontAxleZ,  0],
+        [cfg.rearAxleZ,   0],
+        [cfg.frontAxleZ,  cfg.axleX],
+        [cfg.frontAxleZ, -cfg.axleX],
+        [cfg.rearAxleZ,   cfg.axleX],
+        [cfg.rearAxleZ,  -cfg.axleX],
+      ];
+    }
 
     if (state) {
       this.position.x = state.x;
@@ -190,19 +198,24 @@ export class Car {
   }
 
   getWheelWorldPositions(): Vector3[] {
-    const { axleX, axleY, frontAxleZ, rearAxleZ } = this.cfg;
+    const { axleX, axleY, frontAxleZ, rearAxleZ, kind } = this.cfg;
     const px = this.root.position.x;
     const py = this.root.position.y;
     const pz = this.root.position.z;
     const sinH = Math.sin(this.heading);
     const cosH = Math.cos(this.heading);
 
-    const axles: [number, number, number][] = [
-      [ axleX,  axleY, frontAxleZ],
-      [-axleX,  axleY, frontAxleZ],
-      [ axleX,  axleY, rearAxleZ],
-      [-axleX,  axleY, rearAxleZ],
-    ];
+    const axles: [number, number, number][] = kind === "bike"
+      ? [
+          [0, axleY, frontAxleZ],
+          [0, axleY, rearAxleZ],
+        ]
+      : [
+          [ axleX,  axleY, frontAxleZ],
+          [-axleX,  axleY, frontAxleZ],
+          [ axleX,  axleY, rearAxleZ],
+          [-axleX,  axleY, rearAxleZ],
+        ];
 
     return axles.map(([lx, ly, lz]) =>
       new Vector3(
@@ -282,10 +295,13 @@ export class Car {
 
   private buildVisuals(scene: Scene): void {
     switch (this.cfg.id) {
-      case "buggy":   this.buildBuggy(scene);   break;
-      case "monster": this.buildMonster(scene);  break;
-      case "racer":   this.buildRacer(scene);    break;
-      case "crawler": this.buildCrawler(scene);  break;
+      case "buggy":     this.buildBuggy(scene);     break;
+      case "monster":   this.buildMonster(scene);   break;
+      case "racer":     this.buildRacer(scene);     break;
+      case "crawler":   this.buildCrawler(scene);   break;
+      case "dirtbike":  this.buildDirtBike(scene);  break;
+      case "sportbike": this.buildSportBike(scene); break;
+      case "chopper":   this.buildChopper(scene);   break;
     }
   }
 
@@ -542,6 +558,192 @@ export class Car {
       const valve = MeshBuilder.CreateBox("valve",
         { width: 0.04, height: wr * 0.27, depth: 0.07 }, scene);
       valve.position.set(outerFace, wr * 0.70, 0);
+      valve.parent = hub;
+      valve.material = rimMat;
+
+      this.wheels.push(hub);
+    }
+  }
+
+  // ── 5. Dirt Bike ──────────────────────────────────────────────────────────
+
+  private buildDirtBike(scene: Scene): void {
+    const { axleY, frontAxleZ, rearAxleZ } = this.cfg;
+    const bodyC = hex(this.cfg.bodyColorHex);
+    const FRAME_Y = axleY + 0.52;
+
+    const frameMat  = mat(scene, "frame",  new Color3(0.18, 0.18, 0.20), 0.4);
+    const bodyMat   = mat(scene, "body",   bodyC);
+    const darkMat   = mat(scene, "dark",   bodyC.scale(0.65));
+    const seatMat   = mat(scene, "seat",   new Color3(0.12, 0.12, 0.12), 0.1);
+    const lightMat  = mat(scene, "light",  new Color3(1.0, 0.96, 0.82), 0.0, new Color3(0.9, 0.85, 0.6));
+
+    // Main frame triangle
+    attach(scene, this.root, "frameD", 0.10, 0.10, 1.55, 0, FRAME_Y - 0.18, -0.06, frameMat);
+    attach(scene, this.root, "frameU", 0.10, 0.10, 1.20, 0, FRAME_Y + 0.08, 0.02, frameMat);
+    // Engine block
+    attach(scene, this.root, "engine", 0.32, 0.36, 0.42, 0, axleY + 0.28, -0.04, darkMat);
+    // Fuel tank
+    attach(scene, this.root, "tank",   0.30, 0.22, 0.52, 0, FRAME_Y + 0.02, 0.08, bodyMat);
+    // Seat
+    attach(scene, this.root, "seat",   0.28, 0.10, 0.55, 0, FRAME_Y + 0.12, -0.28, seatMat);
+    // Front forks
+    attach(scene, this.root, "forkL",  0.06, 0.52, 0.06, -0.10, axleY + 0.42, frontAxleZ - 0.08, frameMat);
+    attach(scene, this.root, "forkR",  0.06, 0.52, 0.06,  0.10, axleY + 0.42, frontAxleZ - 0.08, frameMat);
+    // Handlebars
+    attach(scene, this.root, "hbar",   0.62, 0.06, 0.06, 0, FRAME_Y + 0.28, frontAxleZ - 0.12, frameMat);
+    // Front fender
+    attach(scene, this.root, "ffend",  0.34, 0.06, 0.28, 0, axleY + 0.52, frontAxleZ + 0.06, bodyMat);
+    // Rear fender / mudguard
+    attach(scene, this.root, "rfend",  0.30, 0.06, 0.50, 0, axleY + 0.48, rearAxleZ + 0.12, bodyMat);
+    // Headlight
+    attach(scene, this.root, "hl", 0.16, 0.14, 0.10, 0, FRAME_Y + 0.18, frontAxleZ + 0.04, lightMat);
+    // Exhaust
+    attach(scene, this.root, "exh", 0.10, 0.10, 0.55, 0.14, axleY + 0.22, rearAxleZ + 0.10, frameMat);
+
+    this.addBikeWheels(scene, axleY, frontAxleZ, rearAxleZ,
+      new Color3(0.75, 0.75, 0.75), new Color3(0.14, 0.13, 0.12));
+  }
+
+  // ── 6. Sport Bike ─────────────────────────────────────────────────────────
+
+  private buildSportBike(scene: Scene): void {
+    const { axleY, frontAxleZ, rearAxleZ } = this.cfg;
+    const bodyC = hex(this.cfg.bodyColorHex);
+    const FRAME_Y = axleY + 0.46;
+
+    const bodyMat   = mat(scene, "body",   bodyC);
+    const darkMat   = mat(scene, "dark",   new Color3(0.10, 0.10, 0.12), 0.3);
+    const fairMat   = mat(scene, "fair",   bodyC.scale(0.85));
+    const glassMat  = mat(scene, "glass",  new Color3(0.35, 0.60, 0.88), 0.05);
+    const seatMat   = mat(scene, "seat",   new Color3(0.08, 0.08, 0.10), 0.1);
+    const lightMat  = mat(scene, "light",  new Color3(1.0, 0.96, 0.82), 0.0, new Color3(0.9, 0.85, 0.6));
+
+    // Low frame
+    attach(scene, this.root, "frame", 0.08, 0.08, 1.65, 0, FRAME_Y - 0.14, -0.02, darkMat);
+    // Engine
+    attach(scene, this.root, "engine", 0.36, 0.30, 0.50, 0, axleY + 0.22, -0.06, darkMat);
+    // Fairing nose
+    attach(scene, this.root, "nose", 0.42, 0.28, 0.55, 0, FRAME_Y + 0.04, frontAxleZ - 0.18, fairMat);
+    // Windscreen
+    attach(scene, this.root, "ws", 0.36, 0.30, 0.06, 0, FRAME_Y + 0.22, frontAxleZ - 0.10, glassMat, [-0.28, 0, 0]);
+    // Side fairings
+    for (const s of [-1, 1] as const) {
+      attach(scene, this.root, `fair${s}`, 0.08, 0.32, 0.70, s * 0.22, FRAME_Y - 0.02, -0.04, fairMat);
+    }
+    // Fuel tank (rider area)
+    attach(scene, this.root, "tank", 0.34, 0.18, 0.48, 0, FRAME_Y + 0.06, 0.02, bodyMat);
+    // Seat (single piece sport)
+    attach(scene, this.root, "seat", 0.30, 0.08, 0.72, 0, FRAME_Y + 0.10, -0.30, seatMat);
+    // Tail fairing
+    attach(scene, this.root, "tail", 0.28, 0.22, 0.40, 0, FRAME_Y + 0.02, rearAxleZ + 0.04, fairMat);
+    // Clip-on handlebars
+    attach(scene, this.root, "hbar", 0.54, 0.05, 0.05, 0, FRAME_Y + 0.20, frontAxleZ - 0.14, darkMat);
+    // Forks
+    attach(scene, this.root, "forkL", 0.05, 0.44, 0.05, -0.08, axleY + 0.36, frontAxleZ - 0.06, darkMat);
+    attach(scene, this.root, "forkR", 0.05, 0.44, 0.05,  0.08, axleY + 0.36, frontAxleZ - 0.06, darkMat);
+    // Headlight
+    attach(scene, this.root, "hl", 0.14, 0.12, 0.08, 0, FRAME_Y + 0.10, frontAxleZ + 0.02, lightMat);
+    // Tail light
+    attach(scene, this.root, "tl", 0.12, 0.08, 0.06, 0, FRAME_Y + 0.06, rearAxleZ - 0.06,
+      mat(scene, "brake", new Color3(0.85, 0.18, 0.12), 0.0, new Color3(0.6, 0.05, 0.05)));
+
+    this.addBikeWheels(scene, axleY, frontAxleZ, rearAxleZ,
+      new Color3(0.88, 0.85, 0.10), new Color3(0.12, 0.12, 0.12));
+  }
+
+  // ── 7. Desert Chopper ─────────────────────────────────────────────────────
+
+  private buildChopper(scene: Scene): void {
+    const { axleY, frontAxleZ, rearAxleZ, wheelRadius: wr } = this.cfg;
+    const bodyC = hex(this.cfg.bodyColorHex);
+    const FRAME_Y = axleY + 0.58;
+
+    const chromeMat = mat(scene, "chrome", new Color3(0.82, 0.82, 0.86), 0.7);
+    const bodyMat   = mat(scene, "body",   bodyC);
+    const darkMat   = mat(scene, "dark",   new Color3(0.14, 0.12, 0.10), 0.2);
+    const seatMat   = mat(scene, "seat",   new Color3(0.18, 0.10, 0.06), 0.1);
+    const lightMat  = mat(scene, "light",  new Color3(1.0, 0.96, 0.82), 0.0, new Color3(0.9, 0.85, 0.6));
+
+    // Rigid frame
+    attach(scene, this.root, "frame", 0.12, 0.12, 1.90, 0, FRAME_Y - 0.22, -0.04, chromeMat);
+    // Teardrop tank
+    attach(scene, this.root, "tank", 0.38, 0.26, 0.62, 0, FRAME_Y + 0.04, 0.04, bodyMat);
+    // Solo seat
+    attach(scene, this.root, "seat", 0.36, 0.12, 0.50, 0, FRAME_Y + 0.14, -0.30, seatMat);
+    // Engine (V-twin block)
+    attach(scene, this.root, "engine", 0.40, 0.34, 0.48, 0, axleY + 0.30, -0.06, darkMat);
+    // Long front forks
+    attach(scene, this.root, "forkL", 0.07, 0.88, 0.07, -0.12, axleY + 0.62, frontAxleZ - 0.20, chromeMat);
+    attach(scene, this.root, "forkR", 0.07, 0.88, 0.07,  0.12, axleY + 0.62, frontAxleZ - 0.20, chromeMat);
+    // Ape-hanger handlebars
+    attach(scene, this.root, "hbar", 0.72, 0.06, 0.06, 0, FRAME_Y + 0.42, -0.08, chromeMat);
+    for (const s of [-1, 1] as const) {
+      attach(scene, this.root, `hgrip${s}`, 0.06, 0.22, 0.06, s * 0.36, FRAME_Y + 0.52, -0.08, darkMat);
+    }
+    // Sissy bar behind seat
+    attach(scene, this.root, "sissy", 0.08, 0.55, 0.08, 0, FRAME_Y + 0.38, rearAxleZ + 0.18, chromeMat);
+    attach(scene, this.root, "sissyT", 0.42, 0.06, 0.06, 0, FRAME_Y + 0.66, rearAxleZ + 0.18, chromeMat);
+    // Front fender
+    attach(scene, this.root, "ffend", 0.40, 0.08, 0.32, 0, axleY + 0.58, frontAxleZ + 0.08, chromeMat);
+    // Rear fender
+    attach(scene, this.root, "rfend", 0.46, 0.08, 0.55, 0, axleY + 0.52, rearAxleZ + 0.14, chromeMat);
+    // Headlight (round, large)
+    const hl = MeshBuilder.CreateCylinder("hl",
+      { diameter: 0.28, height: 0.10, tessellation: 12 }, scene);
+    hl.rotation.x = Math.PI / 2;
+    hl.position.set(0, FRAME_Y + 0.20, frontAxleZ + 0.06);
+    hl.parent = this.root;
+    hl.material = lightMat;
+    // Exhaust pipes (both sides)
+    for (const s of [-1, 1] as const) {
+      attach(scene, this.root, `exh${s}`, 0.08, 0.08, 0.80, s * 0.20, axleY + 0.18, rearAxleZ + 0.20, chromeMat);
+    }
+
+    // Chopper has a visually larger rear wheel
+    this.addBikeWheels(scene, axleY, frontAxleZ, rearAxleZ,
+      chromeMat.diffuseColor, new Color3(0.12, 0.11, 0.10),
+      wr * 1.18);  // rear wheel scale
+  }
+
+  // ── Bike wheel builder (2 wheels on centreline) ───────────────────────────
+
+  private addBikeWheels(
+    scene: Scene,
+    axleY: number, frontAxleZ: number, rearAxleZ: number,
+    rimColor: Color3, tireColor: Color3,
+    rearScale = 1.0,
+  ): void {
+    const { wheelRadius: wr, wheelThickness: wt } = this.cfg;
+    const tireMat = mat(scene, "tire", tireColor);
+    const rimMat  = mat(scene, "rim",  rimColor, 0.55);
+
+    const positions: [number, number, number, number][] = [
+      [0, axleY, frontAxleZ, 1.0],
+      [0, axleY, rearAxleZ,  rearScale],
+    ];
+
+    for (const [x, y, z, scale] of positions) {
+      const hub = new TransformNode("wheelHub", scene);
+      hub.parent = this.root;
+      hub.position.set(x, y, z);
+
+      const r = wr * scale;
+      const tyre = MeshBuilder.CreateCylinder("tyre",
+        { diameter: r * 2, height: wt, tessellation: 20 }, scene);
+      tyre.rotation.z = Math.PI / 2;
+      tyre.parent = hub;
+      tyre.material = tireMat;
+
+      const rim = MeshBuilder.CreateCylinder("rim",
+        { diameter: r * 1.12, height: 0.05, tessellation: 16 }, scene);
+      rim.rotation.z = Math.PI / 2;
+      rim.parent = hub;
+      rim.material = rimMat;
+
+      const valve = MeshBuilder.CreateBox("valve",
+        { width: 0.04, height: r * 0.25, depth: 0.06 }, scene);
+      valve.position.set(wt / 2 + 0.01, r * 0.68, 0);
       valve.parent = hub;
       valve.material = rimMat;
 

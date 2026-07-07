@@ -31,7 +31,11 @@ export class DustSystem {
     const bx = -Math.sin(h);
     const bz = -Math.cos(h);
 
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < this.systems.length; i++) {
+      if (i >= wheels.length) {
+        this.systems[i].emitRate = 0;
+        continue;
+      }
       this.emitters[i].copyFrom(wheels[i]!);
       this.systems[i].emitRate = rate;
       this.systems[i].direction1.set(bx * 2.5 - 1.0, 0.4, bz * 2.5 - 1.0);

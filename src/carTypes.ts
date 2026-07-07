@@ -1,7 +1,12 @@
-export type CarTypeId = "buggy" | "monster" | "racer" | "crawler";
+export type CarTypeId =
+  | "buggy" | "monster" | "racer" | "crawler"
+  | "dirtbike" | "sportbike" | "chopper";
+
+export type VehicleKind = "car" | "bike";
 
 export interface CarConfig {
   id: CarTypeId;
+  kind: VehicleKind;
   name: string;
   description: string;
   bodyColorHex: string;
@@ -16,7 +21,7 @@ export interface CarConfig {
   axleY: number;       // local Y of axle centre (= wheelRadius for flat ground)
   frontAxleZ: number;  // +Z = forward
   rearAxleZ: number;   // −Z = behind
-  axleX: number;       // half-track width
+  axleX: number;       // half-track width (0 for bikes)
   carBottomOffset: number;
   // ── Slope grip ────────────────────────────────────────────────────────────
   // Lower = better hill-climbing.  The challenge hill requires ≤ 0.6 to summit.
@@ -30,6 +35,7 @@ export interface CarConfig {
 export const CAR_CONFIGS: Record<CarTypeId, CarConfig> = {
   buggy: {
     id: "buggy",
+    kind: "car",
     name: "Dune Buggy",
     description: "Balanced all-rounder built for the desert",
     bodyColorHex: "#c72822",
@@ -43,6 +49,7 @@ export const CAR_CONFIGS: Record<CarTypeId, CarConfig> = {
 
   monster: {
     id: "monster",
+    kind: "car",
     name: "Monster Truck",
     description: "Massive wheels, earth-shaking power",
     bodyColorHex: "#1465c0",
@@ -56,6 +63,7 @@ export const CAR_CONFIGS: Record<CarTypeId, CarConfig> = {
 
   racer: {
     id: "racer",
+    kind: "car",
     name: "Desert Racer",
     description: "Built for pure speed across open sand",
     bodyColorHex: "#cc8800",
@@ -69,6 +77,7 @@ export const CAR_CONFIGS: Record<CarTypeId, CarConfig> = {
 
   crawler: {
     id: "crawler",
+    kind: "car",
     name: "Rock Crawler",
     description: "Slow and steady, grips any terrain",
     bodyColorHex: "#4a6e2a",
@@ -76,7 +85,52 @@ export const CAR_CONFIGS: Record<CarTypeId, CarConfig> = {
     wheelRadius: 0.62, wheelThickness: 0.38,
     axleY: 0.62, frontAxleZ: 1.22, rearAxleZ: -1.20, axleX: 1.28,
     carBottomOffset: 0.05,
-    slopeDragMult: 0.55,   // ← only vehicle that can summit the challenge hill
+    slopeDragMult: 0.55,
     statSpeed: 40, statHandling: 95, statPower: 80,
   },
+
+  dirtbike: {
+    id: "dirtbike",
+    kind: "bike",
+    name: "Dirt Bike",
+    description: "Light and nimble — jumps dunes with ease",
+    bodyColorHex: "#2d8a1e",
+    maxSpeed: 40, acceleration: 34, brake: 44, steerSpeed: 4.2,
+    wheelRadius: 0.40, wheelThickness: 0.14,
+    axleY: 0.40, frontAxleZ: 0.95, rearAxleZ: -0.78, axleX: 0,
+    carBottomOffset: 0.02,
+    slopeDragMult: 1.6,
+    statSpeed: 85, statHandling: 90, statPower: 60,
+  },
+
+  sportbike: {
+    id: "sportbike",
+    kind: "bike",
+    name: "Sport Bike",
+    description: "Blazing fast on flat sand, tricky on slopes",
+    bodyColorHex: "#d01020",
+    maxSpeed: 52, acceleration: 42, brake: 55, steerSpeed: 3.9,
+    wheelRadius: 0.36, wheelThickness: 0.12,
+    axleY: 0.36, frontAxleZ: 1.05, rearAxleZ: -0.88, axleX: 0,
+    carBottomOffset: 0.02,
+    slopeDragMult: 2.8,
+    statSpeed: 100, statHandling: 75, statPower: 70,
+  },
+
+  chopper: {
+    id: "chopper",
+    kind: "bike",
+    name: "Desert Chopper",
+    description: "Long forks, laid-back cruise across the sand",
+    bodyColorHex: "#e86820",
+    maxSpeed: 30, acceleration: 22, brake: 36, steerSpeed: 2.4,
+    wheelRadius: 0.46, wheelThickness: 0.16,
+    axleY: 0.46, frontAxleZ: 1.30, rearAxleZ: -0.92, axleX: 0,
+    carBottomOffset: 0.03,
+    slopeDragMult: 1.9,
+    statSpeed: 55, statHandling: 55, statPower: 75,
+  },
 };
+
+export const CAR_IDS: CarTypeId[] = ["buggy", "monster", "racer", "crawler"];
+export const BIKE_IDS: CarTypeId[] = ["dirtbike", "sportbike", "chopper"];

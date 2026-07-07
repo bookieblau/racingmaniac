@@ -1,10 +1,13 @@
-import { CAR_CONFIGS, CarTypeId } from "./carTypes";
+import { BIKE_IDS, CAR_CONFIGS, CAR_IDS, CarTypeId } from "./carTypes";
 
 const ICONS: Record<CarTypeId, string> = {
-  buggy:   "🏎️",
-  monster: "🚛",
-  racer:   "⚡",
-  crawler: "🪨",
+  buggy:     "🏎️",
+  monster:   "🚛",
+  racer:     "⚡",
+  crawler:   "🪨",
+  dirtbike:  "🏍️",
+  sportbike: "🏁",
+  chopper:   "🛵",
 };
 
 const STAT_COLORS: [string, string, string] = ["#f0c020", "#40c8f0", "#f05030"];
@@ -21,6 +24,7 @@ function statBar(label: string, value: number, color: string): string {
 
 function cardHTML(id: CarTypeId): string {
   const c = CAR_CONFIGS[id];
+  const btnLabel = c.kind === "bike" ? "RIDE!" : "DRIVE!";
   return `
   <div class="g-card" data-car="${id}">
     <div class="g-card-header" style="background:${c.bodyColorHex}">
@@ -32,7 +36,7 @@ function cardHTML(id: CarTypeId): string {
       ${statBar("SPEED",    c.statSpeed,    STAT_COLORS[0])}
       ${statBar("HANDLING", c.statHandling, STAT_COLORS[1])}
       ${statBar("POWER",    c.statPower,    STAT_COLORS[2])}
-      <button class="g-drive-btn" data-car="${id}">DRIVE!</button>
+      <button class="g-drive-btn" data-car="${id}">${btnLabel}</button>
     </div>
   </div>`;
 }
@@ -45,8 +49,13 @@ export function showGarage(): Promise<CarTypeId> {
       <div class="g-inner">
         <h1 class="g-title">RACING MANIAC</h1>
         <p class="g-subtitle">Choose Your Ride</p>
+        <h2 class="g-section">Cars</h2>
         <div class="g-cards">
-          ${(["buggy", "monster", "racer", "crawler"] as CarTypeId[]).map(cardHTML).join("")}
+          ${CAR_IDS.map(cardHTML).join("")}
+        </div>
+        <h2 class="g-section">Motorcycles</h2>
+        <div class="g-cards">
+          ${BIKE_IDS.map(cardHTML).join("")}
         </div>
       </div>`;
     document.body.appendChild(overlay);
