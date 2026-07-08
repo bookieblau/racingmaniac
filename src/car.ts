@@ -11,19 +11,37 @@ import {
 
 import { InputManager } from "./input";
 import { CarConfig } from "./carTypes";
-import { TERRAIN_SIZE, terrainHeight, terrainNormal } from "./terrain";
+import { TERRAIN_SIZE, getObstacles, getRampCrestLaunch, getSurfaceGripMult, isDriftWorld, terrainHeight, terrainNormal } from "./worldContext";
 
 // ── Shared physics constants (not configurable per car) ───────────────────────
 const GRAVITY              = 22;
 const MIN_STEER_FACTOR     = 0.45;
+const PIVOT_STEER_FACTOR   = 0.38; // steer while stationary / coasting without throttle
 const GROUND_EPSILON       = 0.05;
 const MAX_VERTICAL_VELOCITY = 14;
-const LIFTOFF_THRESHOLD    = 15;   // m/s ground-fall rate to trigger liftoff
-const LIFTOFF_MIN_SPEED    = 7;    // m/s car speed required for liftoff
-const TILT_BLEND           = 8;
+const LIFTOFF_THRESHOLD    = 15;   // m/s ground-fall rate to trigger liftoff (bikes)
+const LIFTOFF_MIN_SPEED    = 7;    // m/s speed required for liftoff (bikes)
+const CAR_LIFTOFF_THRESHOLD = 5.5; // cars: easier crest detection
+const CAR_LIFTOFF_MIN_SPEED = 4.5;
+const CAR_JUMP_BOOST       = 4.8;  // m/s pop off ramp lip
+const CAR_JUMP_SPEED_SCALE = 0.12;
 const AIR_TILT_DECAY       = 6;
 const MAX_PITCH            = 0.28;
 const MAX_ROLL             = 0.28;
+const MAX_CAR_PITCH        = 0.12;
+const MAX_CAR_ROLL         = 0.05;
+const CAR_TERRAIN_TILT     = 0.35;
+const GRIP_ALIGN_RATE      = 8.5;
+
+// Four-wheel drift (cars only) — body slides sideways while all wheels stay planted.
+const DRIFT_MIN_SPEED      = 4;
+const MAX_SLIP_ANGLE       = 0.58;
+const SLIP_BUILD_RATE      = 6.5;
+const SLIP_DECAY_RATE      = 5.0;
+const PATH_YAW_BLEND       = 0.82;
+const DRIFT_PATH_MIN       = 0.68;
+const DRIFT_PATH_SLIP_GAIN = 0.48;
+const DRIFT_PATH_PULL      = 5.5;
 
 export class Car {
   readonly root: TransformNode;
@@ -33,7 +51,13 @@ export class Car {
 
   private readonly halfExtent: number;
   private speed = 0;
+  /** Travel direction (momentum path). */
+  private pathHeading = 0;
+  /** Body yaw offset from path — visible sideways four-wheel slide. */
+  private slipAngle = 0;
+  /** @deprecated Bikes only — kept for bike physics path. */
   private heading = 0;
+  private velocityHeading = 0;
   private altitude = 0;
   private verticalVelocity = 0;
   private previousGroundY = 0;
@@ -44,6 +68,10 @@ export class Car {
   private readonly wheels: TransformNode[] = [];
   private readonly position = new Vector3(0, 0, 0);
   private readonly scratchNormal = new Vector3();
+  private rampLaunchLockout = 0;
+  private rampLaunchStrength = 0;
+  private rampLaunchHeight = 0;
+  private readonly prevPosition = new Vector3(0, 0, 0);
 
   constructor(
     scene: Scene,
@@ -74,13 +102,18 @@ export class Car {
     if (state) {
       this.position.x = state.x;
       this.position.z = state.z;
-      this.heading     = state.heading;
+      this.prevPosition.x = state.x;
+      this.prevPosition.z = state.z;
+      this.pathHeading = state.heading;
+      this.heading = state.heading;
+      this.velocityHeading = state.heading;
+      this.slipAngle = 0;
     }
 
     this.root = new TransformNode("carRoot", scene);
     this.buildVisuals(scene);
 
-    this.previousGroundY = this.sampleGround(this.position.x, this.position.z, this.heading);
+    this.previousGroundY = this.sampleGround(this.position.x, this.position.z, this.bodyYaw());
     this.altitude = this.previousGroundY + cfg.carBottomOffset;
     this.syncTransform();
   }
@@ -102,23 +135,16 @@ export class Car {
         Math.sign(this.speed) !== Math.sign(next) || Math.abs(next) < 0.2 ? 0 : next;
     }
 
-    // Only steer when actually moving — prevents spin-in-place from stuck inputs.
     const steerDir = input.isActive("left") ? -1 : input.isActive("right") ? 1 : 0;
-    // Bikes only steer while throttle is held — prevents ghost-steer circles.
-    const throttleHeld = input.isActive("forward") || input.isActive("backward");
-    const canSteer = this.cfg.kind !== "bike" || throttleHeld;
-    if (steerDir !== 0 && Math.abs(this.speed) > 0.5 && canSteer) {
-      const speedFactor = Math.max(MIN_STEER_FACTOR, Math.abs(this.speed) / maxSpeed);
-      this.heading += steerDir * steerSpeed * speedFactor * dt;
+    const fwdSlopeSin = this.forwardSlopeSin();
+
+    if (this.cfg.kind === "car") {
+      this.updateCarDrift(dt, steerDir, steerSpeed, maxSpeed, input, fwdSlopeSin);
+    } else {
+      this.updateBikeSteer(dt, steerDir, steerSpeed, maxSpeed, input, fwdSlopeSin);
     }
 
     // ── Slope grip ───────────────────────────────────────────────────────────
-    // On steep uphill grades the car's top speed is capped based on its
-    // slopeDragMult.  The challenge hill (≈49–67° slope) stops all cars except
-    // the Rock Crawler (slopeDragMult 0.55) which just barely crests the summit.
-    // Normal dunes (≤35°) stay below the activation threshold so ordinary
-    // driving isn't affected.
-    const fwdSlopeSin = this.forwardSlopeSin();
     if (fwdSlopeSin > 0.60) {
       const uphillCap = Math.max(
         0,
@@ -129,25 +155,83 @@ export class Car {
       }
     }
 
-    // ── Move ────────────────────────────────────────────────────────────────
-    this.position.x += Math.sin(this.heading) * this.speed * dt;
-    this.position.z += Math.cos(this.heading) * this.speed * dt;
+    // ── Move along travel heading ───────────────────────────────────────────
+    const travelHeading = this.cfg.kind === "car" ? this.pathHeading : this.velocityHeading;
+    this.position.x += Math.sin(travelHeading) * this.speed * dt;
+    this.position.z += Math.cos(travelHeading) * this.speed * dt;
     this.position.x = clamp(this.position.x, -this.halfExtent, this.halfExtent);
     this.position.z = clamp(this.position.z, -this.halfExtent, this.halfExtent);
 
+    const collision = getObstacles().resolve(
+      this.position.x,
+      this.position.z,
+      this.collisionRadius(),
+    );
+    if (collision.hit) {
+      this.position.x = collision.x;
+      this.position.z = collision.z;
+      this.speed *= 0.25;
+      if (this.cfg.kind === "car") {
+        this.slipAngle *= 0.35;
+        this.pathHeading += normalizeAngle(this.bodyYaw() - this.pathHeading) * 0.4;
+      } else {
+        this.velocityHeading += normalizeAngle(this.heading - this.velocityHeading) * 0.5;
+      }
+    }
+
     // ── Vertical (jump / gravity) ────────────────────────────────────────────
-    const groundY = this.sampleGround(this.position.x, this.position.z, this.heading);
-    const tiltLift =
-      Math.abs(Math.sin(this.pitch)) * 1.1 + Math.abs(Math.sin(this.roll)) * 0.75;
+    const groundY = this.sampleGround(this.position.x, this.position.z, this.bodyYaw());
+    const tiltLift = this.cfg.kind === "car"
+      ? 0
+      : Math.abs(Math.sin(this.pitch)) * 1.1 + Math.abs(Math.sin(this.roll)) * 0.75;
     const groundContact = groundY + this.cfg.carBottomOffset + tiltLift;
 
     // Rate at which the terrain is dropping under the car (m/s, negative = falling away)
     const groundFallRate = (groundY - this.previousGroundY) / dt;
 
+    this.rampLaunchLockout = Math.max(0, this.rampLaunchLockout - dt);
+    this.rampLaunchStrength = 0;
+    this.rampLaunchHeight = 0;
+
+    if (this.cfg.kind === "car" && isDriftWorld()) {
+      const launch = getRampCrestLaunch(
+        this.position.x,
+        this.position.z,
+        this.prevPosition.x,
+        this.prevPosition.z,
+        this.getVelocityHeading(),
+        this.bodyYaw(),
+        this.speed,
+        this.cfg.frontAxleZ,
+      );
+      if (launch) {
+        this.rampLaunchStrength = launch.strength;
+        this.rampLaunchHeight = launch.height;
+      }
+    }
+
     if (!this.airborne) {
-      if (this.speed >= LIFTOFF_MIN_SPEED && groundFallRate < -LIFTOFF_THRESHOLD) {
+      const liftoff = this.cfg.kind === "car"
+        ? this.shouldCarLiftoff(fwdSlopeSin, groundFallRate)
+        : this.speed >= LIFTOFF_MIN_SPEED && groundFallRate < -LIFTOFF_THRESHOLD;
+
+      if (liftoff) {
         this.airborne = true;
-        this.verticalVelocity = 0;
+        if (this.cfg.kind === "car") {
+          const crestLaunch = this.rampLaunchStrength > 0;
+          const dropBoost = crestLaunch ? 0 : Math.min(2.8, this.aheadGroundDrop() * 0.75);
+          const speedBoost = Math.max(0, this.speed - CAR_LIFTOFF_MIN_SPEED) * CAR_JUMP_SPEED_SCALE;
+          const crestBoost = this.rampLaunchStrength * 5.5;
+          this.verticalVelocity = CAR_JUMP_BOOST + dropBoost + speedBoost + crestBoost;
+          if (crestLaunch) {
+            this.altitude = Math.max(groundContact, this.rampLaunchHeight + this.cfg.carBottomOffset);
+            this.rampLaunchLockout = 0.9;
+          } else if (this.rampLaunchStrength > 0.35) {
+            this.rampLaunchLockout = 0.75;
+          }
+        } else {
+          this.verticalVelocity = 0;
+        }
       } else {
         this.altitude = groundContact;
         this.verticalVelocity = 0;
@@ -178,18 +262,159 @@ export class Car {
 
     this.updateTilt(dt);
     this.previousGroundY = groundY;
+    this.prevPosition.x = this.position.x;
+    this.prevPosition.z = this.position.z;
     this.syncTransform();
   }
 
   getWorldPosition(): Vector3 { return this.root.position.clone(); }
-  getHeading(): number        { return this.heading; }
+  getHeading(): number         { return this.bodyYaw(); }
+  getVelocityHeading(): number { return this.cfg.kind === "car" ? this.pathHeading : this.velocityHeading; }
+  getSlipAngle(): number       { return this.cfg.kind === "car" ? this.slipAngle : normalizeAngle(this.heading - this.velocityHeading); }
+  isDrifting(): boolean {
+    if (Math.abs(this.speed) < DRIFT_MIN_SPEED) return false;
+    return this.cfg.kind === "car"
+      ? Math.abs(this.slipAngle) > 0.16
+      : Math.abs(this.getSlipAngle()) > 0.1;
+  }
   getSpeed(): number          { return this.speed; }
   getMaxSpeed(): number       { return this.cfg.maxSpeed; }
   isAirborne(): boolean       { return this.airborne; }
   getCarName(): string        { return this.cfg.name; }
 
   getState(): { x: number; z: number; heading: number } {
-    return { x: this.position.x, z: this.position.z, heading: this.heading };
+    return { x: this.position.x, z: this.position.z, heading: this.bodyYaw() };
+  }
+
+  private bodyYaw(): number {
+    return this.cfg.kind === "car"
+      ? this.pathHeading + this.slipAngle
+      : this.heading;
+  }
+
+  /** Four-wheel drift: build slip angle, arc path heading, all tyres stay down. */
+  private updateCarDrift(
+    dt: number,
+    steerDir: number,
+    steerSpeed: number,
+    maxSpeed: number,
+    input: InputManager,
+    fwdSlopeSin: number,
+  ): void {
+    const speedRatio = Math.min(1, Math.abs(this.speed) / maxSpeed);
+    const grip = this.gripStrength();
+    const onSteep = Math.abs(fwdSlopeSin) > 0.35;
+
+    if (Math.abs(this.speed) < 0.5) {
+      if (steerDir !== 0) {
+        this.pathHeading += steerDir * steerSpeed * PIVOT_STEER_FACTOR * dt;
+      }
+      this.slipAngle *= Math.max(0, 1 - SLIP_DECAY_RATE * dt * 2);
+      return;
+    }
+
+    if (steerDir !== 0 && Math.abs(this.speed) > DRIFT_MIN_SPEED && !onSteep) {
+      const slipCap = MAX_SLIP_ANGLE * speedRatio * clamp(0.55 / grip, 0.45, 1.1);
+      const targetSlip = steerDir * slipCap;
+      const build = input.isActive("forward") ? SLIP_BUILD_RATE : SLIP_BUILD_RATE * 0.65;
+      this.slipAngle += (targetSlip - this.slipAngle) * build * dt;
+
+      const slipRatio = Math.abs(this.slipAngle) / MAX_SLIP_ANGLE;
+      const pathFactor = Math.max(
+        DRIFT_PATH_MIN,
+        speedRatio * (PATH_YAW_BLEND + DRIFT_PATH_SLIP_GAIN * slipRatio),
+      );
+      const throttleMult = input.isActive("forward") ? 1.3 : 0.95;
+      this.pathHeading += steerDir * steerSpeed * pathFactor * throttleMult * dt;
+
+      // Front wheels bite — pull travel direction toward where the nose is pointing.
+      if (slipRatio > 0.15) {
+        const pull = normalizeAngle(this.bodyYaw() - this.pathHeading);
+        if (Math.sign(pull) === steerDir || Math.abs(pull) < 0.08) {
+          this.pathHeading += pull * DRIFT_PATH_PULL * speedRatio * dt;
+        }
+      }
+    } else if (steerDir !== 0) {
+      const speedFactor = Math.max(MIN_STEER_FACTOR, speedRatio);
+      this.pathHeading += steerDir * steerSpeed * speedFactor * dt;
+      this.slipAngle *= Math.max(0, 1 - SLIP_DECAY_RATE * dt);
+    } else {
+      this.slipAngle *= Math.max(0, 1 - SLIP_DECAY_RATE * dt);
+    }
+
+    this.slipAngle = clamp(this.slipAngle, -MAX_SLIP_ANGLE, MAX_SLIP_ANGLE);
+    this.heading = this.bodyYaw();
+    this.velocityHeading = this.pathHeading;
+  }
+
+  /** Bikes use lighter two-heading slide physics. */
+  private updateBikeSteer(
+    dt: number,
+    steerDir: number,
+    steerSpeed: number,
+    maxSpeed: number,
+    input: InputManager,
+    fwdSlopeSin: number,
+  ): void {
+    if (steerDir !== 0) {
+      const speedFactor =
+        Math.abs(this.speed) > 0.5
+          ? Math.max(MIN_STEER_FACTOR, Math.abs(this.speed) / maxSpeed)
+          : PIVOT_STEER_FACTOR;
+      this.heading += steerDir * steerSpeed * speedFactor * dt;
+    }
+
+    if (Math.abs(this.speed) < 0.5) {
+      this.velocityHeading = this.heading;
+    } else {
+      const slip = normalizeAngle(this.heading - this.velocityHeading);
+      let grip = this.gripStrength();
+      if (Math.abs(this.speed) > 4 && steerDir !== 0) grip *= 0.6;
+      if (input.isActive("forward") && Math.abs(slip) > 0.06) grip *= 0.75;
+      if (Math.abs(fwdSlopeSin) > 0.35) grip *= 1.4;
+      const speedRatio = Math.max(0.25, Math.abs(this.speed) / maxSpeed);
+      this.velocityHeading += slip * grip * GRIP_ALIGN_RATE * speedRatio * dt;
+    }
+    this.pathHeading = this.velocityHeading;
+    this.slipAngle = 0;
+  }
+
+  private shouldCarLiftoff(fwdSlopeSin: number, groundFallRate: number): boolean {
+    if (this.speed < CAR_LIFTOFF_MIN_SPEED) return false;
+
+    // Launch the instant the front axle crosses the crest lip.
+    if (this.rampLaunchStrength > 0 && this.rampLaunchLockout <= 0) {
+      return true;
+    }
+
+    // Keep flat drifts planted — only launch off real crests / ramp lips.
+    if (this.isDrifting() && Math.abs(fwdSlopeSin) < 0.2 && groundFallRate > -5) {
+      return false;
+    }
+
+    const crest = groundFallRate < -CAR_LIFTOFF_THRESHOLD;
+    const lipDrop = this.aheadGroundDrop();
+    const lip = lipDrop > (isDriftWorld() ? 1.0 : 1.8);
+
+    if (isDriftWorld()) return crest || lip;
+    return crest && !this.isDrifting();
+  }
+
+  /** How much lower the ground is just ahead along the travel path. */
+  private aheadGroundDrop(): number {
+    const hdg = this.getVelocityHeading();
+    const ahead = 2.8;
+    const here = terrainHeight(this.position.x, this.position.z);
+    const fwd = terrainHeight(
+      this.position.x + Math.sin(hdg) * ahead,
+      this.position.z + Math.cos(hdg) * ahead,
+    );
+    return here - fwd;
+  }
+
+  private collisionRadius(): number {
+    if (this.cfg.kind === "bike") return 1.1;
+    return this.cfg.axleX + 0.85;
   }
 
   dispose(): void {
@@ -208,8 +433,8 @@ export class Car {
     const px = this.root.position.x;
     const py = this.root.position.y;
     const pz = this.root.position.z;
-    const sinH = Math.sin(this.heading);
-    const cosH = Math.cos(this.heading);
+    const sinH = Math.sin(this.bodyYaw());
+    const cosH = Math.cos(this.bodyYaw());
 
     const axles: [number, number, number][] = kind === "bike"
       ? [
@@ -237,8 +462,9 @@ export class Car {
   /** Sine of the terrain slope in the car's forward direction (+ve = uphill). */
   private forwardSlopeSin(): number {
     const SAMPLE = 1.8;
-    const sx = Math.sin(this.heading);
-    const sz = Math.cos(this.heading);
+    const hdg = this.cfg.kind === "car" ? this.pathHeading : this.heading;
+    const sx = Math.sin(hdg);
+    const sz = Math.cos(hdg);
     const hA = terrainHeight(this.position.x + sx * SAMPLE, this.position.z + sz * SAMPLE);
     const hB = terrainHeight(this.position.x - sx * SAMPLE, this.position.z - sz * SAMPLE);
     const rise = hA - hB;
@@ -271,31 +497,50 @@ export class Car {
     }
 
     const normal = terrainNormal(this.position.x, this.position.z, this.scratchNormal);
-    const fwdX = Math.sin(this.heading);
-    const fwdZ = Math.cos(this.heading);
-    const rtX  =  Math.cos(this.heading);
-    const rtZ  = -Math.sin(this.heading);
+    const bodyYaw = this.bodyYaw();
+    const fwdX = Math.sin(bodyYaw);
+    const fwdZ = Math.cos(bodyYaw);
+    const rtX  =  Math.cos(bodyYaw);
+    const rtZ  = -Math.sin(bodyYaw);
 
     const targetPitch = clamp(
       Math.atan2(normal.x * fwdX + normal.z * fwdZ, normal.y),
       -MAX_PITCH, MAX_PITCH,
     );
-    const targetRoll = clamp(
-      Math.atan2(normal.x * rtX + normal.z * rtZ, normal.y),
-      -MAX_ROLL, MAX_ROLL,
-    );
 
-    const tiltBlend = this.cfg.kind === "bike" ? 4 : TILT_BLEND;
+    const terrainRoll = Math.atan2(normal.x * rtX + normal.z * rtZ, normal.y);
+    let targetRoll = terrainRoll;
+    if (this.cfg.kind === "car") {
+      // Sideways drift is yaw-only — keep the body level so all four wheels stay down.
+      targetRoll = clamp(terrainRoll * CAR_TERRAIN_TILT, -MAX_CAR_ROLL, MAX_CAR_ROLL);
+    } else {
+      targetRoll += this.getSlipAngle() * Math.min(0.35, Math.abs(this.speed) / this.cfg.maxSpeed * 0.4);
+      targetRoll = clamp(targetRoll, -MAX_ROLL, MAX_ROLL);
+    }
+
+    const carPitch = clamp(targetPitch * CAR_TERRAIN_TILT, -MAX_CAR_PITCH, MAX_CAR_PITCH);
+    const finalPitch = this.cfg.kind === "car" ? carPitch : targetPitch;
+
+    const tiltBlend = this.cfg.kind === "bike" ? 4 : 5;
     const blend = 1 - Math.pow(0.001, deltaSeconds);
-    this.pitch += (targetPitch - this.pitch) * blend * tiltBlend;
+    this.pitch += (finalPitch - this.pitch) * blend * tiltBlend;
     this.roll  += (targetRoll  - this.roll)  * blend * tiltBlend;
+  }
+
+  /** Higher = less drift. Scales with handling stat and surface. */
+  private gripStrength(): number {
+    if (this.cfg.kind === "car") {
+      const handlingGrip = 0.38 + (this.cfg.statHandling / 100) * 0.48;
+      return handlingGrip * getSurfaceGripMult();
+    }
+    const handlingGrip = 0.48 + (this.cfg.statHandling / 100) * 0.58;
+    return handlingGrip * 1.2 * getSurfaceGripMult();
   }
 
   private syncTransform(): void {
     this.root.position.set(this.position.x, this.altitude, this.position.z);
-    // Yaw-pitch-roll order — avoids roll coupling into heading on flat city streets.
     this.root.rotationQuaternion = Quaternion.RotationYawPitchRoll(
-      this.heading, this.pitch, this.roll,
+      this.bodyYaw(), this.pitch, this.roll,
     );
   }
 
@@ -798,6 +1043,13 @@ function hex(h: string): Color3 {
   const g = parseInt(h.slice(3, 5), 16) / 255;
   const b = parseInt(h.slice(5, 7), 16) / 255;
   return new Color3(r, g, b);
+}
+
+function normalizeAngle(angle: number): number {
+  let a = angle;
+  while (a > Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return a;
 }
 
 function clamp(v: number, lo: number, hi: number): number {

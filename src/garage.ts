@@ -1,5 +1,11 @@
 import { BIKE_IDS, CAR_CONFIGS, CAR_IDS, CarTypeId } from "./carTypes";
 
+export interface GarageOptions {
+  bikesOnly?: boolean;
+  title?: string;
+  subtitle?: string;
+}
+
 const ICONS: Record<CarTypeId, string> = {
   buggy:     "🏎️",
   monster:   "🚛",
@@ -41,18 +47,21 @@ function cardHTML(id: CarTypeId): string {
   </div>`;
 }
 
-export function showGarage(): Promise<CarTypeId> {
+export function showGarage(options: GarageOptions = {}): Promise<CarTypeId> {
+  const { bikesOnly = false, title = "RACING MANIAC", subtitle = "Choose Your Ride" } = options;
+
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
     overlay.id = "garage";
     overlay.innerHTML = `
       <div class="g-inner">
-        <h1 class="g-title">RACING MANIAC</h1>
-        <p class="g-subtitle">Choose Your Ride</p>
+        <h1 class="g-title">${title}</h1>
+        <p class="g-subtitle">${subtitle}</p>
+        ${bikesOnly ? "" : `
         <h2 class="g-section">Cars</h2>
         <div class="g-cards">
           ${CAR_IDS.map(cardHTML).join("")}
-        </div>
+        </div>`}
         <h2 class="g-section">Motorcycles</h2>
         <div class="g-cards">
           ${BIKE_IDS.map(cardHTML).join("")}
@@ -66,6 +75,7 @@ export function showGarage(): Promise<CarTypeId> {
       if (!target) return;
       const id = target.dataset.car as CarTypeId;
       if (!CAR_CONFIGS[id]) return;
+      if (bikesOnly && CAR_CONFIGS[id].kind !== "bike") return;
 
       e.preventDefault();
       e.stopPropagation();

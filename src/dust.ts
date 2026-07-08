@@ -24,12 +24,18 @@ export class DustSystem {
   update(car: Car): void {
     const wheels = car.getWheelWorldPositions();
     const speed  = car.getSpeed();
-    const rate   = car.isAirborne() ? 0 : Math.min(70, speed * 4);
+    const drifting = car.isDrifting();
+    const slip = car.getSlipAngle();
 
-    // Spray direction: backward from car heading with upward spread
-    const h  = car.getHeading();
-    const bx = -Math.sin(h);
-    const bz = -Math.cos(h);
+    const driftMult = drifting ? 1.6 + Math.abs(slip) * 3.2 : 1;
+    const rate = car.isAirborne() ? 0 : Math.min(140, speed * 5 * driftMult);
+
+    const pathH = car.getVelocityHeading();
+    const bx = -Math.sin(pathH);
+    const bz = -Math.cos(pathH);
+    const sideX = Math.cos(pathH) * Math.sign(slip || 1);
+    const sideZ = -Math.sin(pathH) * Math.sign(slip || 1);
+    const sidePush = drifting ? 1.4 : 0;
 
     for (let i = 0; i < this.systems.length; i++) {
       if (i >= wheels.length) {
@@ -38,8 +44,16 @@ export class DustSystem {
       }
       this.emitters[i].copyFrom(wheels[i]!);
       this.systems[i].emitRate = rate;
-      this.systems[i].direction1.set(bx * 2.5 - 1.0, 0.4, bz * 2.5 - 1.0);
-      this.systems[i].direction2.set(bx * 2.5 + 1.0, 3.5, bz * 2.5 + 1.0);
+      this.systems[i].direction1.set(
+        bx * 2.2 - 0.8 + sideX * sidePush,
+        0.35,
+        bz * 2.2 - 0.8 + sideZ * sidePush,
+      );
+      this.systems[i].direction2.set(
+        bx * 2.8 + 0.8 + sideX * sidePush,
+        drifting ? 4.2 : 3.2,
+        bz * 2.8 + 0.8 + sideZ * sidePush,
+      );
     }
   }
 }
@@ -64,25 +78,24 @@ function makeParticleSystem(
   tex: DynamicTexture,
   scene: Scene,
 ): ParticleSystem {
-  const ps = new ParticleSystem(name, 60, scene);
+  const ps = new ParticleSystem(name, 80, scene);
   ps.particleTexture = tex;
   ps.emitter         = emitter;
   ps.emitRate        = 0;
 
-  // Small spread box around the wheel contact point
-  ps.minEmitBox = new Vector3(-0.12, 0,    -0.12);
-  ps.maxEmitBox = new Vector3( 0.12, 0.05,  0.12);
+  ps.minEmitBox = new Vector3(-0.14, 0,    -0.14);
+  ps.maxEmitBox = new Vector3( 0.14, 0.06,  0.14);
 
   ps.color1    = new Color4(0.90, 0.76, 0.52, 0.80);
   ps.color2    = new Color4(0.76, 0.63, 0.40, 0.60);
   ps.colorDead = new Color4(0.65, 0.52, 0.35, 0);
 
   ps.minSize     = 0.06;
-  ps.maxSize     = 0.26;
+  ps.maxSize     = 0.30;
   ps.minLifeTime = 0.20;
-  ps.maxLifeTime = 0.60;
+  ps.maxLifeTime = 0.65;
   ps.minEmitPower = 0.8;
-  ps.maxEmitPower = 2.8;
+  ps.maxEmitPower = 3.2;
   ps.updateSpeed  = 0.016;
 
   ps.gravity    = new Vector3(0, -4, 0);

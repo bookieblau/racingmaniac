@@ -18,6 +18,42 @@ export function configureCityAtmosphere(scene: Scene): void {
   scene.fogEnd = 420;
 }
 
+export function configureForestAtmosphere(scene: Scene): void {
+  scene.clearColor.set(0.45, 0.62, 0.78, 1);
+
+  scene.fogMode = Scene.FOGMODE_LINEAR;
+  scene.fogColor = new Color3(0.55, 0.72, 0.58);
+  scene.fogStart = 200;
+  scene.fogEnd = 480;
+}
+
+export function configureEnduroAtmosphere(scene: Scene): void {
+  scene.clearColor.set(0.58, 0.68, 0.82, 1);
+
+  scene.fogMode = Scene.FOGMODE_LINEAR;
+  scene.fogColor = new Color3(0.72, 0.68, 0.58);
+  scene.fogStart = 220;
+  scene.fogEnd = 520;
+}
+
+export function configureQuarryAtmosphere(scene: Scene): void {
+  scene.clearColor.set(0.48, 0.52, 0.56, 1);
+
+  scene.fogMode = Scene.FOGMODE_LINEAR;
+  scene.fogColor = new Color3(0.58, 0.61, 0.64);
+  scene.fogStart = 160;
+  scene.fogEnd = 420;
+}
+
+export function configureDriftAtmosphere(scene: Scene): void {
+  scene.clearColor.set(0.72, 0.82, 0.94, 1);
+
+  scene.fogMode = Scene.FOGMODE_LINEAR;
+  scene.fogColor = new Color3(0.82, 0.86, 0.92);
+  scene.fogStart = 300;
+  scene.fogEnd = 650;
+}
+
 /** @deprecated Use configureDesertAtmosphere */
 export const configureSceneAtmosphere = configureDesertAtmosphere;
 
