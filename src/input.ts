@@ -11,9 +11,10 @@ const KEY_MAP: Record<string, DriveAction | undefined> = {
   A: "left",
   d: "right",
   D: "right",
+  Shift: "wheelie",
 };
 
-export type DriveAction = "forward" | "backward" | "left" | "right";
+export type DriveAction = "forward" | "backward" | "left" | "right" | "wheelie";
 
 const ARM_DELAY_MS = 600;
 
@@ -93,7 +94,9 @@ export class InputManager {
   // ── On-screen touch buttons ────────────────────────────────────────────────
 
   private wireTouchButtons(): void {
-    const VALID: Record<string, true> = { forward: true, backward: true, left: true, right: true };
+    const VALID: Record<string, true> = {
+      forward: true, backward: true, left: true, right: true, wheelie: true,
+    };
 
     document.querySelectorAll<HTMLElement>("[data-action]").forEach((el) => {
       const raw = el.dataset["action"] ?? "";

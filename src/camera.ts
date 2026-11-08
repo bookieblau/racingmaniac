@@ -12,6 +12,9 @@ const CAMERA_GROUND_CLEARANCE = 2.5;
 // Smaller = faster response; larger = smoother / more lag.
 const CAR_Y_TAU    = 0.14;  // smooth raw car altitude before feeding into camera
 const LOOK_AT_TAU  = 0.07;  // smooth the look-at target Y
+const FOLLOW_TAU   = 0.11;  // lag behind the car horizontally
+const BASE_FOV     = 0.85;
+const FOV_SPEED    = 0.22;
 
 export class ChaseCamera {
   private readonly smoothPosition = new Vector3();
@@ -60,8 +63,9 @@ export class ChaseCamera {
     // Smooth the car's raw Y so the camera doesn't jiggle with terrain snapping.
     const carYBlend   = 1 - Math.exp(-deltaSeconds / CAR_Y_TAU);
     const lookAtBlend = 1 - Math.exp(-deltaSeconds / LOOK_AT_TAU);
+    const bodyBump = -car.getBodyPitch() * 0.35 + Math.abs(car.getBodyRoll()) * 0.12;
     this.smoothedCarY += (carPosition.y - this.smoothedCarY) * carYBlend;
-    this.lookAtY      += (carPosition.y + 1.1 - this.lookAtY) * lookAtBlend;
+    this.lookAtY      += (carPosition.y + 1.1 + bodyBump - this.lookAtY) * lookAtBlend;
 
     const distance = FOLLOW_DISTANCE + speedRatio * 5;
     const heightAboveCar = FOLLOW_HEIGHT + (car.isAirborne() ? AIR_EXTRA_HEIGHT : 0);
@@ -79,10 +83,12 @@ export class ChaseCamera {
       groundAtCamera + CAMERA_GROUND_CLEARANCE,
     );
 
-    // XZ snaps immediately (heading lag would feel sluggish), Y is already smoothed.
-    this.smoothPosition.x = desiredX;
-    this.smoothPosition.z = desiredZ;
+    const followBlend = 1 - Math.exp(-deltaSeconds / FOLLOW_TAU);
+    this.smoothPosition.x += (desiredX - this.smoothPosition.x) * followBlend;
+    this.smoothPosition.z += (desiredZ - this.smoothPosition.z) * followBlend;
     this.smoothPosition.y = desiredY;
+
+    this.camera.fov = BASE_FOV + speedRatio * FOV_SPEED;
 
     this.lookAt.set(
       carPosition.x + Math.sin(heading) * LOOK_AHEAD,
@@ -92,5 +98,6 @@ export class ChaseCamera {
 
     this.camera.position.copyFrom(this.smoothPosition);
     this.camera.setTarget(this.lookAt);
+    this.camera.rotation.z = car.getBodyRoll() * 0.2;
   }
 }

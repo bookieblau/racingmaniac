@@ -5,6 +5,7 @@ import {
   FreeCamera,
   HemisphericLight,
   Scene,
+  ShadowGenerator,
   Vector3,
 } from "@babylonjs/core";
 import { ChaseCamera } from "./camera";
@@ -19,6 +20,7 @@ import {
 } from "./lighting";
 import { DustSystem } from "./dust";
 import { DriftMarksSystem } from "./driftMarks";
+import { EngineAudio } from "./engineAudio";
 import { showGarage } from "./garage";
 import { CAR_CONFIGS } from "./carTypes";
 import {
@@ -61,6 +63,14 @@ import {
   DRIFT_SUN_DIFFUSE,
   DRIFT_SUN_SPECULAR,
 } from "./worlds/driftWorld";
+import {
+  MOTO_HEMI_DIFFUSE,
+  MOTO_HEMI_GROUND,
+  MOTO_SUN_DIFFUSE,
+  MOTO_SUN_SPECULAR,
+} from "./worlds/motoWorld";
+import { WORLD_CONFIGS } from "./worldTypes";
+import { setupSceneGraphics } from "./sceneGraphics";
 
 interface WorldLighting {
   hemiGround: Color3;
@@ -99,6 +109,12 @@ const WORLD_LIGHTING: Record<WorldId, WorldLighting> = {
     hemiDiffuse: DRIFT_HEMI_DIFFUSE,
     sunDiffuse: DRIFT_SUN_DIFFUSE,
     sunSpecular: DRIFT_SUN_SPECULAR,
+  },
+  moto: {
+    hemiGround: MOTO_HEMI_GROUND,
+    hemiDiffuse: MOTO_HEMI_DIFFUSE,
+    sunDiffuse: MOTO_SUN_DIFFUSE,
+    sunSpecular: MOTO_SUN_SPECULAR,
   },
 };
 
@@ -149,20 +165,34 @@ function createGameSession(
   sun.intensity = SUN_INTENSITY;
   sun.diffuse = lighting.sunDiffuse;
   sun.specular = lighting.sunSpecular;
+  sun.autoCalcShadowZBounds = true;
+
+  const shadow = new ShadowGenerator(2048, sun);
+  shadow.useBlurExponentialShadowMap = true;
+
+  const bindShadowCasters = (vehicle: Car) => {
+    for (const mesh of vehicle.root.getChildMeshes(false)) {
+      shadow.addShadowCaster(mesh);
+    }
+  };
 
   const carConfig = CAR_CONFIGS[carTypeId];
   const car = new Car(scene, carConfig, getSpawnState(worldId));
+  bindShadowCasters(car);
 
   const camera = new FreeCamera("followCam", new Vector3(0, 6, -13), scene);
   camera.minZ = 0.1;
   scene.activeCamera = camera;
 
   const chaseCamera = new ChaseCamera(camera, car);
+  const sceneGraphics = setupSceneGraphics(scene, camera, sun, shadow, worldId);
   const input = new InputManager();
   input.arm();
   const hud = new Hud();
   const dust = new DustSystem(scene);
   const driftMarks = new DriftMarksSystem(scene);
+  const engineAudio = new EngineAudio();
+  engineAudio.start(carTypeId);
 
   hud.setCarName(carConfig.name);
   hud.setRaceMode(isRaceWorld(worldId));
@@ -181,15 +211,21 @@ function createGameSession(
     const state = activeCar.getState();
     showGarage(
       bikesOnly
-        ? { bikesOnly: true, title: "WERN DDU QUARRY", subtitle: "Bikes only — pick your ride" }
+        ? {
+            bikesOnly: true,
+            title: WORLD_CONFIGS[worldId].name.toUpperCase(),
+            subtitle: "Bikes only — pick your ride",
+          }
         : {},
     ).then((newId) => {
       const oldCar = activeCar;
       activeCar = new Car(scene, CAR_CONFIGS[newId], state);
+      bindShadowCasters(activeCar);
       oldCar.dispose();
       chaseCamera.reset(activeCar);
       input.arm();
       hud.setCarName(CAR_CONFIGS[newId].name);
+      engineAudio.setVehicle(newId);
       options.onCarTypeIdChange(newId);
       swapping = false;
     }).catch(() => {
@@ -210,6 +246,7 @@ function createGameSession(
     hud.update(activeCar, checkpoints?.getHudState());
     dust.update(activeCar);
     driftMarks.update(activeCar);
+    engineAudio.update(activeCar, input);
     scene.render();
   };
 
@@ -225,6 +262,8 @@ function createGameSession(
     }
     engine.stopRenderLoop();
     window.removeEventListener("resize", onResize);
+    engineAudio.dispose();
+    sceneGraphics.dispose();
     scene.dispose();
     engine.dispose();
   };
@@ -243,7 +282,7 @@ async function ensureBikeForQuarry(worldId: WorldId, carTypeId: CarTypeId): Prom
   if (isBikesOnlyWorld(worldId) && CAR_CONFIGS[carTypeId].kind !== "bike") {
     return showGarage({
       bikesOnly: true,
-      title: "WERN DDU QUARRY",
+      title: WORLD_CONFIGS[worldId].name.toUpperCase(),
       subtitle: "Bikes only — pick your ride",
     });
   }

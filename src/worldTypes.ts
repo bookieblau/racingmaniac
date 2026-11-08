@@ -1,4 +1,4 @@
-export type WorldId = "desert" | "forest" | "enduro" | "quarry" | "drift";
+export type WorldId = "desert" | "forest" | "enduro" | "quarry" | "drift" | "moto";
 
 export interface WorldConfig {
   id: WorldId;
@@ -37,5 +37,11 @@ export const WORLD_CONFIGS: Record<WorldId, WorldConfig> = {
     name: "Drift Arena",
     description: "Huge flat asphalt lot — build speed, slide, and hit the jumps",
     icon: "💨",
+  },
+  moto: {
+    id: "moto",
+    name: "Motocross Track",
+    description: "Outdoor MX — whoops, berms, doubles & tabletops · bikes only",
+    icon: "🏍️",
   },
 };

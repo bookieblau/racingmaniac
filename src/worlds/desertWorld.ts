@@ -1,12 +1,12 @@
 import { Color3, Scene } from "@babylonjs/core";
 import { configureDesertAtmosphere } from "../lighting";
-import { createDesertSky } from "../sky";
+import { createWorldSky } from "../sky";
 import { createDesertTerrain } from "../terrainMesh";
 import { populateWorld } from "../world";
 
 export function setupDesertWorld(scene: Scene): void {
   configureDesertAtmosphere(scene);
-  createDesertSky(scene);
+  createWorldSky(scene, "desert");
   createDesertTerrain(scene);
   populateWorld(scene);
 }

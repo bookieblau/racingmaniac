@@ -54,6 +54,15 @@ export function configureDriftAtmosphere(scene: Scene): void {
   scene.fogEnd = 650;
 }
 
+export function configureMotoAtmosphere(scene: Scene): void {
+  scene.clearColor.set(0.58, 0.76, 0.94, 1);
+
+  scene.fogMode = Scene.FOGMODE_LINEAR;
+  scene.fogColor = new Color3(0.72, 0.82, 0.68);
+  scene.fogStart = 280;
+  scene.fogEnd = 720;
+}
+
 /** @deprecated Use configureDesertAtmosphere */
 export const configureSceneAtmosphere = configureDesertAtmosphere;
 
@@ -61,5 +70,5 @@ export function getSunDirection(): Vector3 {
   return new Vector3(-0.55, -1, 0.35).normalize();
 }
 
-export const HEMI_INTENSITY = 0.62;
-export const SUN_INTENSITY = 1.25;
+export const HEMI_INTENSITY = 0.58;
+export const SUN_INTENSITY = 1.48;

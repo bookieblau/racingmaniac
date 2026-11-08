@@ -82,6 +82,19 @@
         opacity: 0.8;
       }
 
+      .hud-rpm {
+        margin-left: auto;
+        font-size: 13px;
+        font-weight: 600;
+        opacity: 0.88;
+      }
+
+      .hud-rpm::after {
+        content: " rpm";
+        font-weight: 400;
+        opacity: 0.75;
+      }
+
       #hud-status {
         font-size: 12px;
         font-weight: 700;
@@ -294,6 +307,17 @@
         border-color: rgba(255, 100, 80, 0.50);
         color: rgba(255, 160, 150, 0.90);
         align-self: flex-end;
+        margin-bottom: 6px;
+      }
+
+      .wheelie-btn {
+        width: 62px;
+        height: 62px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        border-color: rgba(140, 130, 255, 0.55);
+        color: rgba(190, 185, 255, 0.90);
         margin-bottom: 6px;
       }
 
@@ -574,7 +598,8 @@
       <div id="hud-title">Racing Maniac</div>
       <div id="hud-stats">
         <span id="hud-speed">0</span>
-        <span id="hud-speed-label">speed</span>
+        <span id="hud-speed-label">km/h</span>
+        <span id="hud-rpm" class="hud-rpm">0</span>
         <span id="hud-status">GND</span>
       </div>
       <div id="hud-help">WASD / arrows — yellow hood is the front</div>
@@ -593,8 +618,12 @@
       </div>
       <!-- Right zone: gas (large) + brake (smaller, above) -->
       <div class="touch-zone" style="flex-direction:column-reverse; gap:10px;">
-        <button class="touch-btn gas-btn"   type="button" data-action="forward">GAS</button>
-        <button class="touch-btn brake-btn" type="button" data-action="backward">BRAKE</button>
+        <button class="touch-btn gas-btn"    type="button" data-action="forward">GAS</button>
+        <button class="touch-btn brake-btn"  type="button" data-action="backward">BRAKE</button>
+      </div>
+      <!-- Wheelie zone: bikes only, sits between steering and gas -->
+      <div class="touch-zone" style="align-self:flex-end;">
+        <button class="touch-btn wheelie-btn" type="button" data-action="wheelie">WHEELIE</button>
       </div>
     </div>
 

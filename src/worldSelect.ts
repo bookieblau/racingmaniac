@@ -1,6 +1,6 @@
 import { WORLD_CONFIGS, WorldId } from "./worldTypes";
 
-const WORLD_ORDER: WorldId[] = ["desert", "forest", "enduro", "quarry", "drift"];
+const WORLD_ORDER: WorldId[] = ["desert", "forest", "enduro", "quarry", "moto", "drift"];
 
 export function showWorldSelect(): Promise<WorldId> {
   return new Promise((resolve) => {

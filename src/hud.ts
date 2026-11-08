@@ -1,11 +1,12 @@
 import { Car } from "./car";
 import type { RaceHudState } from "./checkpoints";
 
-/** Speed display uses an arbitrary scale so numbers feel like a speedometer. */
-const SPEED_DISPLAY_SCALE = 2.2;
+/** Game speeds are in m/s; show km/h on the HUD. */
+const MS_TO_KMH = 3.6;
 
 export class Hud {
   private readonly speedElement: HTMLElement;
+  private readonly rpmElement: HTMLElement | null;
   private readonly statusElement: HTMLElement;
   private readonly titleElement: HTMLElement | null;
   private readonly raceElement: HTMLElement | null;
@@ -21,6 +22,7 @@ export class Hud {
       throw new Error("Missing HUD elements");
     }
     this.speedElement = speedElement;
+    this.rpmElement = document.getElementById("hud-rpm");
     this.statusElement = statusElement;
     this.titleElement = document.getElementById("hud-title");
     this.raceElement = document.getElementById("hud-race");
@@ -41,8 +43,12 @@ export class Hud {
   }
 
   update(car: Car, race?: RaceHudState): void {
-    const displaySpeed = Math.round(Math.abs(car.getSpeed()) * SPEED_DISPLAY_SCALE);
+    const ratio = Math.abs(car.getSpeed()) / car.getMaxSpeed();
+    const displaySpeed = Math.round(Math.abs(car.getSpeed()) * MS_TO_KMH);
     this.speedElement.textContent = String(displaySpeed);
+    if (this.rpmElement) {
+      this.rpmElement.textContent = String(Math.round(850 + ratio * 6400));
+    }
 
     if (car.isAirborne()) {
       this.statusElement.textContent = "AIR";
